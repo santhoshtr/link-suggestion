@@ -1,6 +1,7 @@
 use streaming_iterator::StreamingIterator;
 use tree_sitter::{Node, Parser, Query, QueryCursor, Range};
 use tree_sitter_wikitext::LANGUAGE;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct WikiLink {
@@ -13,6 +14,20 @@ pub struct WikiLink {
 pub struct TextSegment {
     pub text: String,
     pub range: Range,
+}
+
+impl fmt::Display for TextSegment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "TextSegment[{}:{}-{}:{}]: \"{}\"",
+            self.range.start_point.row,
+            self.range.start_point.column,
+            self.range.end_point.row,
+            self.range.end_point.column,
+            self.text
+        )
+    }
 }
 
 pub struct WikiText {

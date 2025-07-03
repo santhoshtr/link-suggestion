@@ -48,8 +48,16 @@ impl LinkSuggestion {
 
 impl fmt::Display for LinkSuggestion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Text segment: {:?}", self.text_segment.text)?;
-        writeln!(f, "[[{}|{}]]", self.title.normalized(), self.label)?;
+        writeln!(
+            f,
+            "Segment[{}:{}-{}:{}]: \"{}\"",
+            self.text_segment.range.start_point.row,
+            self.text_segment.range.start_point.column,
+            self.text_segment.range.end_point.row,
+            self.text_segment.range.end_point.column,
+            self.text_segment.text
+        )?;
+        writeln!(f, "Suggestion: [[{}|{}]]", self.title.normalized(), self.label)?;
 
         // Print the edit positions for tree-sitter
         if let Some((start, end, replacement)) = self.calculate_link_edit_positions() {
