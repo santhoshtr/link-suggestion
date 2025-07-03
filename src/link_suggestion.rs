@@ -1,0 +1,94 @@
+use crate::{stopwords::STOP_WORDS, wiki_title::WikiTitle, wikitext::TextSegment};
+use std::fmt;
+
+#[derive(Debug, Clone)]
+pub struct LinkSuggestion {
+    pub text_segment: TextSegment,
+    pub title: WikiTitle,
+    pub label: String,
+}
+
+impl LinkSuggestion {
+    pub fn new(text_segment: TextSegment, title: WikiTitle, label: String) -> Self {
+        LinkSuggestion {
+            text_segment,
+            title,
+            label,
+        }
+    }
+    /// Calculates the byte positions required to convert the label to a wiki internal link.
+    ///
+    /// Returns a tuple of (start_byte, end_byte, replacement_text) where:
+    /// - start_byte: The starting byte position within the text segment where the label begins
+    /// - end_byte: The ending byte position within the text segment where the label ends
+    /// - replacement_text: The wiki link format string to replace the label with
+    ///
+    /// The byte positions are calculated relative to the text segment's start_byte.
+    pub fn calculate_link_edit_positions(&self) -> Option<(usize, usize, String)> {
+        let text = &self.text_segment.text;
+        let label = &self.label;
+
+        // Find the label within the text segment
+        if let Some(label_start) = text.find(label) {
+            let label_end = label_start + label.len();
+
+            // Calculate absolute byte positions
+            let absolute_start = self.text_segment.range.start_byte + label_start;
+            let absolute_end = self.text_segment.range.start_byte + label_end;
+
+            // Create the wiki link replacement text
+            let replacement = format!("[[{}|{}]]", self.title.normalized(), label);
+
+            Some((absolute_start, absolute_end, replacement))
+        } else {
+            None
+        }
+    }
+}
+
+impl fmt::Display for LinkSuggestion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Text segment: {:?}", self.text_segment.text)?;
+        writeln!(f, "[[{}|{}]]", self.title.normalized(), self.label)?;
+        
+        // Print the edit positions for tree-sitter
+        if let Some((start, end, replacement)) = self.calculate_link_edit_positions() {
+            writeln!(f, "Edit: bytes {}..{} -> '{}'", start, end, replacement)?;
+        }
+        write!(f, "---")
+    }
+}
+
+/// Filters a list of WikiTitle candidates to remove unwanted suggestions.
+///
+/// This function removes:
+/// - Titles that are purely numeric
+/// - Titles that are common stopwords
+///
+/// # Arguments
+/// * `candidates` - A vector of WikiTitle candidates to filter
+///
+/// # Returns
+/// A filtered vector of WikiTitle suggestions
+pub fn filter_suggestions(candidates: Vec<LinkSuggestion>) -> Vec<LinkSuggestion> {
+    candidates
+        .into_iter()
+        .filter(|candidate| {
+            let normalized = candidate.title.normalized();
+
+            // Remove titles that are numbers
+            if normalized.chars().all(|c| c.is_ascii_digit()) {
+                return false;
+            }
+
+            // Remove titles that are stopwords
+            let stopwords = STOP_WORDS;
+            let lower_title = normalized.to_lowercase();
+            if stopwords.contains(&lower_title.as_str()) {
+                return false;
+            }
+
+            true
+        })
+        .collect()
+}

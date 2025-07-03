@@ -1,0 +1,215 @@
+use std::fmt;
+
+/// Represents a Wikipedia page title with utilities for normalization and manipulation
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct WikiTitle {
+    /// The raw title as it appears
+    raw: String,
+    /// The normalized title following Wikipedia conventions
+    normalized: String,
+}
+
+impl WikiTitle {
+    /// Creates a new WikiTitle from a raw string
+    pub fn new(title: &str) -> Self {
+        let normalized = Self::normalize_title(title);
+        Self {
+            raw: title.to_string(),
+            normalized,
+        }
+    }
+
+    /// Returns the raw (original) title
+    pub fn raw(&self) -> &str {
+        &self.raw
+    }
+
+    /// Returns the normalized title
+    pub fn normalized(&self) -> &str {
+        &self.normalized
+    }
+
+    /// Normalizes a Wikipedia title according to Wikipedia conventions
+    fn normalize_title(title: &str) -> String {
+        let mut normalized = title.trim().to_string();
+
+        // Replace underscores with spaces
+        normalized = normalized.replace('_', " ");
+
+        // Normalize whitespace (collapse multiple spaces to single space)
+        normalized = normalized
+            .split_whitespace()
+            .collect::<Vec<&str>>()
+            .join("_");
+
+        // Capitalize first letter of each word for title case
+        if !normalized.is_empty() {
+            let mut chars: Vec<char> = normalized.chars().collect();
+            chars[0] = chars[0].to_uppercase().next().unwrap_or(chars[0]);
+            normalized = chars.into_iter().collect();
+        }
+
+        normalized
+    }
+
+    /// Converts the title to URL-safe format (spaces to underscores)
+    pub fn to_url_format(&self) -> String {
+        self.normalized.replace(' ', "_")
+    }
+
+    /// Returns the title in display format (normalized with spaces)
+    pub fn to_display_format(&self) -> String {
+        self.normalized.clone()
+    }
+
+    /// Checks if this title represents a disambiguation page
+    pub fn is_disambiguation(&self) -> bool {
+        self.normalized.contains("(disambiguation)")
+            || self.normalized.ends_with(" (disambiguation)")
+    }
+
+    /// Extracts the main title without parenthetical disambiguation
+    pub fn main_title(&self) -> String {
+        if let Some(paren_pos) = self.normalized.find('(') {
+            self.normalized[..paren_pos].trim().to_string()
+        } else {
+            self.normalized.clone()
+        }
+    }
+
+    /// Extracts the disambiguation part (content in parentheses)
+    pub fn disambiguation_part(&self) -> Option<String> {
+        if let Some(start) = self.normalized.find('(') {
+            if let Some(end) = self.normalized.find(')') {
+                if end > start {
+                    return Some(self.normalized[start + 1..end].to_string());
+                }
+            }
+        }
+        None
+    }
+
+    /// Checks if the title is valid (not empty after normalization)
+    pub fn is_valid(&self) -> bool {
+        !self.normalized.is_empty()
+    }
+
+    /// Returns the namespace if present (e.g., "User:" from "User:Example")
+    pub fn namespace(&self) -> Option<String> {
+        if let Some(colon_pos) = self.normalized.find(':') {
+            let potential_namespace = &self.normalized[..colon_pos];
+            // Common Wikipedia namespaces
+            match potential_namespace {
+                "User" | "Wikipedia" | "File" | "MediaWiki" | "Template" | "Help" | "Category"
+                | "Portal" | "Book" | "Draft" | "Education Program" | "TimedText" | "Module"
+                | "Gadget" | "Gadget definition" | "Topic" => Some(potential_namespace.to_string()),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Returns the title without namespace prefix
+    pub fn without_namespace(&self) -> String {
+        if let Some(_namespace) = self.namespace() {
+            if let Some(colon_pos) = self.normalized.find(':') {
+                return self.normalized[colon_pos + 1..].to_string();
+            }
+        }
+        self.normalized.clone()
+    }
+
+    /// Checks if this is a main namespace article (no namespace prefix)
+    pub fn is_main_namespace(&self) -> bool {
+        self.namespace().is_none()
+    }
+
+    /// Creates a WikiTitle from a URL-encoded string
+    pub fn from_url_encoded(url_title: &str) -> Self {
+        let decoded = url_title.replace('_', " ");
+        Self::new(&decoded)
+    }
+
+    /// Compares two titles for equality (using normalized forms)
+    pub fn equals(&self, other: &WikiTitle) -> bool {
+        self.normalized == other.normalized
+    }
+
+    /// Compares title with a string (normalizes the string first)
+    pub fn equals_str(&self, other: &str) -> bool {
+        self.normalized == Self::normalize_title(other)
+    }
+}
+
+impl fmt::Display for WikiTitle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.normalized)
+    }
+}
+
+impl From<&str> for WikiTitle {
+    fn from(title: &str) -> Self {
+        Self::new(title)
+    }
+}
+
+impl From<String> for WikiTitle {
+    fn from(title: String) -> Self {
+        Self::new(&title)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic_normalization() {
+        let title = WikiTitle::new("  hello_world  ");
+        assert_eq!(title.normalized(), "Hello world");
+    }
+
+    #[test]
+    fn test_url_format() {
+        let title = WikiTitle::new("Hello world");
+        assert_eq!(title.to_url_format(), "Hello_world");
+    }
+
+    #[test]
+    fn test_disambiguation() {
+        let title = WikiTitle::new("Apple (fruit)");
+        assert!(title.is_disambiguation());
+        assert_eq!(title.main_title(), "Apple");
+        assert_eq!(title.disambiguation_part(), Some("fruit".to_string()));
+    }
+
+    #[test]
+    fn test_namespace() {
+        let title = WikiTitle::new("User:Example");
+        assert_eq!(title.namespace(), Some("User".to_string()));
+        assert_eq!(title.without_namespace(), "Example");
+        assert!(!title.is_main_namespace());
+    }
+
+    #[test]
+    fn test_main_namespace() {
+        let title = WikiTitle::new("Regular Article");
+        assert!(title.is_main_namespace());
+        assert_eq!(title.namespace(), None);
+    }
+
+    #[test]
+    fn test_equality() {
+        let title1 = WikiTitle::new("Hello_World");
+        let title2 = WikiTitle::new("Hello World");
+        assert!(title1.equals(&title2));
+        assert!(title1.equals_str("hello world"));
+    }
+
+    #[test]
+    fn test_from_url_encoded() {
+        let title = WikiTitle::from_url_encoded("Hello_World_Example");
+        assert_eq!(title.normalized(), "Hello World Example");
+    }
+}
