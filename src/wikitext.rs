@@ -78,33 +78,40 @@ impl WikiText {
         if let Some(tree) = tree {
             let root_node = tree.root_node();
             let mut cursor = QueryCursor::new();
-            let mut captures = cursor.captures(&self.link_query, root_node, wikitext.as_bytes());
+            let matches = cursor.matches(&self.link_query, root_node, wikitext.as_bytes());
 
             let mut links = Vec::new();
-            while let Some((mat, capture_index)) = captures.next() {
-                let capture = mat.captures[*capture_index];
-                let capture_name = &self.link_query.capture_names()[capture.index as usize];
-                let node_text = get_node_text(capture.node, wikitext);
-                dbg!(&node_text);
-                match *capture_name {
-                    // Inline links
-                    "link.title" => {
-                        let title = node_text.trim_matches('"').trim_matches('\'');
-                        if !title.contains(':') && !title.contains('.') {
-                            // Skip images
-                            links.push(WikiLink {
-                                label: Some(String::new()),
-                                title: title.to_string(),
-                                range: capture.node.range(),
-                            });
+            for mat in matches {
+                let mut current_link = WikiLink {
+                    label: None,
+                    title: String::new(),
+                    range: mat.captures[0].node.range(), // Default range
+                };
+
+                // Process all captures in this match
+                for capture in mat.captures {
+                    let capture_name = &self.link_query.capture_names()[capture.index as usize];
+                    let node_text = get_node_text(capture.node, wikitext);
+                    dbg!(&node_text);
+                    
+                    match *capture_name {
+                        "link.title" => {
+                            let title = node_text.trim_matches('"').trim_matches('\'');
+                            if !title.contains(':') && !title.contains('.') {
+                                current_link.title = title.to_string();
+                                current_link.range = capture.node.range();
+                            }
                         }
-                    }
-                    "link.label" => {
-                        if let Some(last_link) = links.last_mut() {
-                            last_link.label = Some(node_text);
+                        "link.label" => {
+                            current_link.label = Some(node_text);
                         }
+                        _ => {}
                     }
-                    _ => {}
+                }
+
+                // Only add if we found a valid title
+                if !current_link.title.is_empty() {
+                    links.push(current_link);
                 }
             }
             Ok(links)
