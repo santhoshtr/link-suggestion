@@ -50,7 +50,7 @@ impl fmt::Display for LinkSuggestion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Text segment: {:?}", self.text_segment.text)?;
         writeln!(f, "[[{}|{}]]", self.title.normalized(), self.label)?;
-        
+
         // Print the edit positions for tree-sitter
         if let Some((start, end, replacement)) = self.calculate_link_edit_positions() {
             writeln!(f, "Edit: bytes {}..{} -> '{}'", start, end, replacement)?;
