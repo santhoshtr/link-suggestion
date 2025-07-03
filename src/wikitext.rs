@@ -1,7 +1,7 @@
-use streaming_iterator::StreamingIterator;
-use tree_sitter::{Node, Parser, Query, QueryCursor, Range};
-use tree_sitter_wikitext::LANGUAGE;
 use std::fmt;
+use streaming_iterator::StreamingIterator;
+use tree_sitter::{Node, ParseOptions, Parser, Query, QueryCursor, Range};
+use tree_sitter_wikitext::LANGUAGE;
 
 #[derive(Debug, Clone)]
 pub struct WikiLink {
@@ -63,7 +63,18 @@ impl WikiText {
     }
 
     pub fn extract_links(&mut self, wikitext: &str) -> Result<Vec<WikiLink>, &'static str> {
-        let tree = self.parser.parse(wikitext, None);
+        let parse_opts = ParseOptions::new();
+        let tree = self.parser.parse_with_options(
+            &mut |i, _| {
+                if i < wikitext.len() {
+                    &wikitext[i..]
+                } else {
+                    ""
+                }
+            },
+            None,
+            Some(parse_opts),
+        );
         if let Some(tree) = tree {
             let root_node = tree.root_node();
             let mut cursor = QueryCursor::new();
@@ -74,6 +85,7 @@ impl WikiText {
                 let capture = mat.captures[*capture_index];
                 let capture_name = &self.link_query.capture_names()[capture.index as usize];
                 let node_text = get_node_text(capture.node, wikitext);
+                dbg!(&node_text);
                 match *capture_name {
                     // Inline links
                     "link.title" => {
