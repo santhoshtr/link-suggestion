@@ -1,9 +1,9 @@
 // Import necessary crates for command-line argument parsing.
 use clap::{Parser, Subcommand};
 use link_suggestion::{LinkSuggestion, filter_suggestions};
+use std::io;
 use std::path::PathBuf;
-use std::{fs, io};
-use wiki_title::WikiTitle;
+use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
 use wikitext::WikiText;
 
 mod bloom_filter;
@@ -52,12 +52,15 @@ enum Commands {
         word: String,
     },
     Links {
+        /// Wikipedia language code (e.g., "en", "fr", "de").
+        #[arg(short, long)]
+        language: String,
+        /// Wikipedia article title.
+        #[arg(short, long)]
+        title: String,
         /// List all possible candidates
         #[arg(short, long)]
         candidates: bool,
-        /// Path to the input file containing wikitext.
-        #[arg(short, long, value_name = "FILE")]
-        input_file: PathBuf,
         /// Path to the serialized Bloom filter file.
         #[arg(short, long, value_name = "FILE")]
         filter_file: PathBuf,
@@ -65,7 +68,8 @@ enum Commands {
 }
 
 // The main function where the program execution begins.
-fn main() -> io::Result<()> {
+#[tokio::main]
+async fn main() -> io::Result<()> {
     // Parse the command-line arguments.
     let cli = Cli::parse();
 
@@ -94,13 +98,14 @@ fn main() -> io::Result<()> {
         }
         Commands::Links {
             candidates,
-            input_file,
             filter_file,
+            language,
+            title,
         } => {
             let mut parser = WikiText::new().unwrap();
 
-            let wikitext =
-                fs::read_to_string(input_file).expect("Should have been able to read the file");
+            let mut wikitext = fetch_wikipedia_wikitext(language, title).await.unwrap();
+            wikitext.push('\n');
             let existing_links = parser.extract_links(wikitext.as_str());
             dbg!(&existing_links);
             let text_segments = parser.extract_text(wikitext.as_str()).unwrap();
@@ -131,7 +136,11 @@ fn main() -> io::Result<()> {
                     let wiki_title = WikiTitle::new(&candidate);
                     let normalized_title = wiki_title.normalized().to_string();
 
-                    link_suggestions.push(LinkSuggestion::new(segment.clone(), wiki_title, candidate));
+                    link_suggestions.push(LinkSuggestion::new(
+                        segment.clone(),
+                        wiki_title,
+                        candidate,
+                    ));
                 }
             }
 

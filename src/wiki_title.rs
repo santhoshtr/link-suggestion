@@ -1,3 +1,4 @@
+use serde_json::Value;
 use std::fmt;
 
 /// Represents a Wikipedia page title with utilities for normalization and manipulation
@@ -140,6 +141,40 @@ impl WikiTitle {
     pub fn equals_str(&self, other: &str) -> bool {
         self.normalized == Self::normalize_title(other)
     }
+}
+
+pub async fn fetch_wikipedia_wikitext(
+    language: &str,
+    title: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let url = format!(
+        "https://{}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&format=json&titles={}&&formatversion=2",
+        language, title
+    );
+
+    let client = reqwest::Client::new();
+    dbg!(&url);
+    let response = client
+        .get(&url)
+        .header(
+            "User-Agent",
+            "WikiLink-Suggester/1.0 (https://github.com/example/wikilink-suggester)",
+        )
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        return Err(format!("Failed to fetch article: HTTP {}", response.status()).into());
+    }
+
+    let json_text = response.text().await?;
+    let json: Value = serde_json::from_str(&json_text)?;
+
+    let wikitext = json["query"]["pages"][0]["revisions"][0]["content"]
+        .as_str()
+        .ok_or("Could not find wikitext content in API response")?
+        .to_string();
+
+    Ok(wikitext)
 }
 
 impl fmt::Display for WikiTitle {

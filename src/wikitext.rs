@@ -1,6 +1,7 @@
-use std::fmt;
-use streaming_iterator::StreamingIterator;
-use tree_sitter::{Node, ParseOptions, Parser, Query, QueryCursor, Range};
+use std::{fmt, ops};
+use tree_sitter::{
+    Node, ParseOptions, Parser, Point, Query, QueryCursor, Range, StreamingIterator,
+};
 use tree_sitter_wikitext::LANGUAGE;
 
 #[derive(Debug, Clone)]
@@ -77,11 +78,19 @@ impl WikiText {
         );
         if let Some(tree) = tree {
             let root_node = tree.root_node();
-            let mut cursor = QueryCursor::new();
-            let matches = cursor.matches(&self.link_query, root_node, wikitext.as_bytes());
+            let mut query_cursor = QueryCursor::new();
+            // query_cursor.set_point_range(ops::Range {
+            //     start: Point { row: 0, column: 0 },
+            //     end: Point {
+            //         row: 200,
+            //         column: 0,
+            //     },
+            // });
+            let mut captures =
+                query_cursor.captures(&self.link_query, root_node, wikitext.as_bytes());
 
             let mut links = Vec::new();
-            for mat in matches {
+            while let Some((mat, capture_index)) = captures.next() {
                 let mut current_link = WikiLink {
                     label: None,
                     title: String::new(),
@@ -93,7 +102,7 @@ impl WikiText {
                     let capture_name = &self.link_query.capture_names()[capture.index as usize];
                     let node_text = get_node_text(capture.node, wikitext);
                     dbg!(&node_text);
-                    
+
                     match *capture_name {
                         "link.title" => {
                             let title = node_text.trim_matches('"').trim_matches('\'');
