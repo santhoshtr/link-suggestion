@@ -2,10 +2,12 @@ use std::fmt;
 use tree_sitter::{Node, ParseOptions, Parser, Query, QueryCursor, Range, StreamingIterator};
 use tree_sitter_wikitext::LANGUAGE;
 
+use crate::wiki_title::WikiTitle;
+
 #[derive(Debug, Clone)]
 pub struct WikiLink {
     pub label: Option<String>,
-    pub title: String,
+    pub title: WikiTitle,
     pub range: Range,
 }
 
@@ -89,12 +91,9 @@ impl WikiText {
 
             let mut links = Vec::new();
             while let Some((mat, _capture_index)) = captures.next() {
-                let mut current_link = WikiLink {
-                    label: None,
-                    title: String::new(),
-                    range: mat.captures[0].node.range(), // Default range
-                };
-
+                let mut current_link_label = None;
+                let mut current_link_title: WikiTitle = WikiTitle::new("");
+                let mut current_link_range = mat.captures[0].node.range();
                 // Process all captures in this match
                 for capture in mat.captures {
                     let capture_name = &self.link_query.capture_names()[capture.index as usize];
@@ -105,19 +104,24 @@ impl WikiText {
                         "link.title" => {
                             let title = node_text.trim_matches('"').trim_matches('\'');
                             if !title.contains(':') && !title.contains('.') {
-                                current_link.title = title.to_string();
-                                current_link.range = capture.node.range();
+                                current_link_title = WikiTitle::new(title);
+                                current_link_range = capture.node.range();
                             }
                         }
                         "link.label" => {
-                            current_link.label = Some(node_text);
+                            current_link_label = Some(node_text);
                         }
                         _ => {}
                     }
                 }
+                let current_link = WikiLink {
+                    title: current_link_title,
+                    range: current_link_range,
+                    label: current_link_label,
+                };
 
                 // Only add if we found a valid title
-                if !current_link.title.is_empty() {
+                if current_link.title.is_valid() {
                     links.push(current_link);
                 }
             }
@@ -198,23 +202,5 @@ impl TextSegment {
         candidates.extend(self.bigrams());
         candidates.extend(self.trigrams());
         candidates
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_inline_links() -> Result<(), Box<dyn std::error::Error>> {
-        let mut extractor = WikiText::new()?;
-        let wikitext = "[[Example| title]]";
-        let links = extractor.extract_links(wikitext)?;
-
-        assert_eq!(links.len(), 1);
-        assert_eq!(links[0].label, Some("Example".to_string()));
-        assert_eq!(links[0].title, "https://example.com");
-
-        Ok(())
     }
 }

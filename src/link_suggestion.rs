@@ -115,7 +115,10 @@ pub fn filter_suggestions(
             }
 
             // Remove candidates that are already present in existing WikiLinks
-            if existing_links.iter().any(|link| link.title == normalized) {
+            if existing_links
+                .iter()
+                .any(|link| link.title.normalized() == normalized)
+            {
                 return false;
             }
             if candidate.title.normalized() == current_article_tite {
