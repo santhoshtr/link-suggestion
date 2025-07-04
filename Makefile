@@ -1,3 +1,5 @@
+# NOTE: This Makefile is optimized for parallel execution.
+# Run with `make -j` to use all CPU cores.
 # Query to find all page titles
 PAGEQUERY := "select page_title from page where page_namespace=0 and page_is_redirect = 0"
 wikipedia.list:
@@ -13,14 +15,20 @@ init:
 	mkdir -p bloom
 
 # Pattern rule for generating .titles.list files
-titles/%.titles.list: wikipedia.list | init
+titles/%.titles.list:
 	echo $(PAGEQUERY) | analytics-mysql $* > $@
 
 bloom/%.bloom: titles/%.titles.list
-	./target/release/bloom-wiki build -i titles/$*.titles.list -o $@
+	./target/release/bloom-wiki build-bloom -i titles/$*.titles.list -o $@
+
+anchrordictionary/%.sqlite:
+	# Decompress the following file to /tmp/ (should cleanup after)
+	# /mnt/data/xmldatadumps/public/$*/latest/$*-latest-all-titles.gz
+	# Then call ./target/release/bloom-wiki build-anchor-dictionary with that xml 
+	# file as argument. AI!
 
 # Generate all targets based on wikipedia.list content
-WIKIS := $(shell if [ -f wikipedia.list ]; then cat wikipedia.list; fi)
+WIKIS := $(shell cat wikipedia.list)
 WIKI_TARGETS := $(addprefix titles/,$(addsuffix .titles.list,$(WIKIS)))
 WIKI_BLOOM_TARGETS := $(addprefix bloom/, $(addsuffix .bloom,$(WIKIS)))
 
@@ -28,5 +36,5 @@ clean:
 	rm -rf bloom titles *.list
 
 .PHONY: all-titles all-bloom clean
-all-titles: wikipedia.list $(WIKI_TARGETS)
-all-bloom: $(WIKI_BLOOM_TARGETS)
+all-titles: init wikipedia.list $(WIKI_TARGETS)
+all-bloom: init wikipedia.list $(WIKI_BLOOM_TARGETS)
