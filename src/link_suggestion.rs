@@ -100,8 +100,11 @@ pub fn filter_suggestions(
             if normalized.chars().all(|c| c.is_ascii_digit()) {
                 return false;
             }
-            // Remove candidates that are already present in WikiLink. Use `title` property of
-            // WikiLink to match. AI!
+
+            // Remove candidates that are already present in existing WikiLinks
+            if existing_links.iter().any(|link| link.title == normalized) {
+                return false;
+            }
 
             // Remove titles that are stopwords
             let stopwords = STOP_WORDS;
