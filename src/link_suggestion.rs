@@ -3,6 +3,7 @@ use crate::{
     wiki_title::WikiTitle,
     wikitext::{TextSegment, WikiLink},
 };
+use std::collections::HashSet;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -92,11 +93,16 @@ pub fn filter_suggestions(
     existing_links: Vec<WikiLink>,
     current_article_tite: &String,
 ) -> Vec<LinkSuggestion> {
-    // Make candidates a unique set. AI!
+    let mut seen_titles = HashSet::new();
     candidates
         .into_iter()
         .filter(|candidate| {
             let normalized = candidate.title.normalized();
+
+            // Deduplicate based on normalized title
+            if !seen_titles.insert(normalized.clone()) {
+                return false;
+            }
 
             // Remove titles that are numbers
             if normalized.chars().all(|c| c.is_ascii_digit()) {
