@@ -100,7 +100,7 @@ pub fn filter_suggestions(
             let normalized = candidate.title.normalized();
 
             // Deduplicate based on normalized title
-            if !seen_titles.insert(normalized.clone()) {
+            if !seen_titles.insert(normalized.to_string()) {
                 return false;
             }
 
