@@ -90,7 +90,9 @@ impl fmt::Display for LinkSuggestion {
 pub fn filter_suggestions(
     candidates: Vec<LinkSuggestion>,
     existing_links: Vec<WikiLink>,
+    current_article_tite: &String,
 ) -> Vec<LinkSuggestion> {
+    // Make candidates a unique set. AI!
     candidates
         .into_iter()
         .filter(|candidate| {
@@ -103,6 +105,12 @@ pub fn filter_suggestions(
 
             // Remove candidates that are already present in existing WikiLinks
             if existing_links.iter().any(|link| link.title == normalized) {
+                return false;
+            }
+            if candidate.title.normalized() == current_article_tite {
+                return false;
+            }
+            if candidate.title.raw() == current_article_tite {
                 return false;
             }
 
