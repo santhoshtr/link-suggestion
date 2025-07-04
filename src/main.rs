@@ -102,10 +102,9 @@ async fn main() -> io::Result<()> {
 
             let mut wikitext = fetch_wikipedia_wikitext(language, title).await.unwrap();
             wikitext.push('\n');
-            let existing_links = parser.extract_links(wikitext.as_str());
-            dbg!(&existing_links);
+            let existing_links = parser.extract_links(wikitext.as_str()).unwrap();
             let text_segments = parser.extract_text(wikitext.as_str()).unwrap();
-            dbg!(&text_segments);
+            dbg!(&existing_links);
 
             // Load the bloom filter
             let filter_manager = BloomFilterManager::load_from_file(filter_file)?;
@@ -114,7 +113,6 @@ async fn main() -> io::Result<()> {
 
             for segment in text_segments {
                 let link_candidates = segment.link_candidates();
-                dbg!(&link_candidates);
 
                 // Filter candidates through the bloom filter
                 let filtered_candidates: Vec<String> = link_candidates
@@ -122,7 +120,6 @@ async fn main() -> io::Result<()> {
                     .filter(|candidate| {
                         let wiki_title = WikiTitle::new(candidate);
                         let normalized_title = wiki_title.normalized();
-                        dbg!(&normalized_title);
                         filter_manager.check_word(normalized_title)
                     })
                     .collect();
@@ -140,7 +137,7 @@ async fn main() -> io::Result<()> {
 
             // Print all link suggestions using the Display trait
             println!("Link suggestions:");
-            let link_suggestions = filter_suggestions(link_suggestions);
+            let link_suggestions = filter_suggestions(link_suggestions, existing_links, title);
             for suggestion in &link_suggestions {
                 println!("{}", suggestion);
             }
