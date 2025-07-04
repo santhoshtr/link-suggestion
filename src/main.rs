@@ -58,9 +58,6 @@ enum Commands {
         /// Wikipedia article title.
         #[arg(short, long)]
         title: String,
-        /// List all possible candidates
-        #[arg(short, long)]
-        candidates: bool,
         /// Path to the serialized Bloom filter file.
         #[arg(short, long, value_name = "FILE")]
         filter_file: PathBuf,
@@ -97,7 +94,6 @@ async fn main() -> io::Result<()> {
             filter_manager.check_word_with_output(word);
         }
         Commands::Links {
-            candidates,
             filter_file,
             language,
             title,
@@ -134,8 +130,6 @@ async fn main() -> io::Result<()> {
                 // Create LinkSuggestion for each filtered candidate
                 for candidate in filtered_candidates {
                     let wiki_title = WikiTitle::new(&candidate);
-                    let normalized_title = wiki_title.normalized().to_string();
-
                     link_suggestions.push(LinkSuggestion::new(
                         segment.clone(),
                         wiki_title,

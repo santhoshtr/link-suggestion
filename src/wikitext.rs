@@ -1,7 +1,5 @@
-use std::{fmt, ops};
-use tree_sitter::{
-    Node, ParseOptions, Parser, Point, Query, QueryCursor, Range, StreamingIterator,
-};
+use std::fmt;
+use tree_sitter::{Node, ParseOptions, Parser, Query, QueryCursor, Range, StreamingIterator};
 use tree_sitter_wikitext::LANGUAGE;
 
 #[derive(Debug, Clone)]
@@ -90,7 +88,7 @@ impl WikiText {
                 query_cursor.captures(&self.link_query, root_node, wikitext.as_bytes());
 
             let mut links = Vec::new();
-            while let Some((mat, capture_index)) = captures.next() {
+            while let Some((mat, _capture_index)) = captures.next() {
                 let mut current_link = WikiLink {
                     label: None,
                     title: String::new(),

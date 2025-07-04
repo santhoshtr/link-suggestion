@@ -1,4 +1,4 @@
-pub static STOP_WORDS: [&'static str; 127] = [
+pub static STOP_WORDS: [&str; 127] = [
     "i",
     "me",
     "my",
