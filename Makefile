@@ -13,6 +13,7 @@ init:
 	cargo build --profile=release 
 	mkdir -p titles
 	mkdir -p bloom
+	mkdir -p anchrordictionary
 
 # Pattern rule for generating .titles.list files
 titles/%.titles.list:
@@ -22,10 +23,9 @@ bloom/%.bloom: titles/%.titles.list
 	./target/release/bloom-wiki build-bloom -i titles/$*.titles.list -o $@
 
 anchrordictionary/%.sqlite:
-	# Decompress the following file to /tmp/ (should cleanup after)
-	# /mnt/data/xmldatadumps/public/$*/latest/$*-latest-all-titles.gz
-	# Then call ./target/release/bloom-wiki build-anchor-dictionary with that xml 
-	# file as argument. AI!
+	gunzip -c /mnt/data/xmldatadumps/public/$*/latest/$*-latest-all-titles.gz > /tmp/$*-all-titles.xml
+	./target/release/bloom-wiki build-anchor-dictionary /tmp/$*-all-titles.xml -o $@
+	rm /tmp/$*-all-titles.xml
 
 # Generate all targets based on wikipedia.list content
 WIKIS := $(shell cat wikipedia.list)
