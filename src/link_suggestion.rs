@@ -1,4 +1,8 @@
-use crate::{stopwords::STOP_WORDS, wiki_title::WikiTitle, wikitext::TextSegment};
+use crate::{
+    stopwords::STOP_WORDS,
+    wiki_title::WikiTitle,
+    wikitext::{TextSegment, WikiLink},
+};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -57,7 +61,12 @@ impl fmt::Display for LinkSuggestion {
             self.text_segment.range.end_point.column,
             self.text_segment.text
         )?;
-        writeln!(f, "Suggestion: [[{}|{}]]", self.title.normalized(), self.label)?;
+        writeln!(
+            f,
+            "Suggestion: [[{}|{}]]",
+            self.title.normalized(),
+            self.label
+        )?;
 
         // Print the edit positions for tree-sitter
         if let Some((start, end, replacement)) = self.calculate_link_edit_positions() {
@@ -78,7 +87,10 @@ impl fmt::Display for LinkSuggestion {
 ///
 /// # Returns
 /// A filtered vector of WikiTitle suggestions
-pub fn filter_suggestions(candidates: Vec<LinkSuggestion>) -> Vec<LinkSuggestion> {
+pub fn filter_suggestions(
+    candidates: Vec<LinkSuggestion>,
+    existing_links: Vec<WikiLink>,
+) -> Vec<LinkSuggestion> {
     candidates
         .into_iter()
         .filter(|candidate| {
@@ -88,6 +100,8 @@ pub fn filter_suggestions(candidates: Vec<LinkSuggestion>) -> Vec<LinkSuggestion
             if normalized.chars().all(|c| c.is_ascii_digit()) {
                 return false;
             }
+            // Remove candidates that are already present in WikiLink. Use `title` property of
+            // WikiLink to match. AI!
 
             // Remove titles that are stopwords
             let stopwords = STOP_WORDS;
