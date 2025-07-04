@@ -109,6 +109,7 @@ pub fn filter_suggestions(
                 return false;
             }
 
+            // Remove if title is single letter. AI!
             // Remove candidates that are already present in existing WikiLinks
             if existing_links.iter().any(|link| link.title == normalized) {
                 return false;
