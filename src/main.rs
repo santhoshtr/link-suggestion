@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use std::io;
 use std::path::PathBuf;
 use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
-use wikitext::WikiText;
+use wikitext::{WikiText, TextSegment};
 
 mod bloom_filter;
 mod link_suggestion;
@@ -37,6 +37,185 @@ enum Commands {
     },
 }
 
+fn load_bloom_filters(language: &str) -> (BloomFilterManager, BloomFilterManager) {
+    let link_title_bloom_filter_file = PathBuf::from(format!("bloom/{language}wiki.bloom"));
+    let link_title_filter_manager =
+        BloomFilterManager::load_from_file(&link_title_bloom_filter_file)
+            .unwrap_or_else(|_| panic!("Error reading file bloom/{language}wiki.bloom"));
+    
+    let link_label_bloom_filter_file =
+        PathBuf::from(format!("bloom/{language}wiki.labels.bloom"));
+    let link_label_filter_manager = BloomFilterManager::load_from_file(
+        &link_label_bloom_filter_file,
+    )
+    .unwrap_or_else(|_| panic!(" Error reading file bloom/{language}wiki.labels.bloom"));
+
+    (link_title_filter_manager, link_label_filter_manager)
+}
+
+fn open_database(language: &str) -> Connection {
+    let db_path = format!("anchor-dictionaries/{language}wiki.sqlite");
+    Connection::open(&db_path)
+        .unwrap_or_else(|_| panic!("Error opening database {db_path}"))
+}
+
+fn process_title_candidates(
+    segment: &TextSegment,
+    candidates: Vec<String>,
+    title_filter: &BloomFilterManager,
+) -> Vec<LinkSuggestion> {
+    let mut suggestions = Vec::new();
+    
+    let filtered_candidates: Vec<String> = candidates
+        .into_iter()
+        .filter(|candidate| {
+            let wiki_title = WikiTitle::new(candidate);
+            let normalized_title = wiki_title.normalized();
+            title_filter.exist(normalized_title)
+        })
+        .collect();
+
+    for candidate in filtered_candidates {
+        let wiki_title = WikiTitle::new(&candidate);
+        suggestions.push(LinkSuggestion::new(
+            segment.clone(),
+            wiki_title,
+            candidate,
+        ));
+    }
+    
+    suggestions
+}
+
+fn query_link_titles_for_label(conn: &Connection, candidate: &str) -> rusqlite::Result<Vec<(String, i32)>> {
+    let mut stmt = conn.prepare(
+        "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10",
+    )?;
+    
+    let results: Result<Vec<(String, i32)>, _> = stmt
+        .query_map([candidate], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+        })?
+        .collect();
+    
+    results
+}
+
+fn should_skip_label_results(results: &[(String, i32)]) -> bool {
+    if let Some((_, first_freq)) = results.first() {
+        if *first_freq == 1 {
+            return true;
+        }
+    }
+    
+    if results.len() > 1 {
+        return true;
+    }
+    
+    false
+}
+
+fn process_label_candidates(
+    segment: &TextSegment,
+    candidates: Vec<String>,
+    label_filter: &BloomFilterManager,
+    conn: &Connection,
+) -> Vec<LinkSuggestion> {
+    let mut suggestions = Vec::new();
+    
+    let filtered_candidates: Vec<String> = candidates
+        .into_iter()
+        .filter(|candidate| label_filter.exist(candidate))
+        .collect();
+
+    for candidate in filtered_candidates {
+        if let Ok(results) = query_link_titles_for_label(conn, &candidate) {
+            if should_skip_label_results(&results) {
+                if results.len() > 1 {
+                    dbg!("Skip {candidate}", &candidate);
+                }
+                continue;
+            }
+            
+            for (link_title, _) in results {
+                let wiki_title = WikiTitle::new(&link_title);
+                suggestions.push(LinkSuggestion::new(
+                    segment.clone(),
+                    wiki_title,
+                    candidate.clone(),
+                ));
+            }
+        }
+    }
+    
+    suggestions
+}
+
+fn process_text_segments(
+    text_segments: Vec<TextSegment>,
+    title_filter: &BloomFilterManager,
+    label_filter: &BloomFilterManager,
+    conn: &Connection,
+) -> Vec<LinkSuggestion> {
+    let mut link_suggestions = Vec::new();
+
+    for segment in text_segments {
+        let link_candidates = segment.link_candidates();
+
+        // Process title candidates
+        let title_suggestions = process_title_candidates(
+            &segment,
+            link_candidates.clone(),
+            title_filter,
+        );
+        link_suggestions.extend(title_suggestions);
+
+        // Process label candidates
+        let label_suggestions = process_label_candidates(
+            &segment,
+            link_candidates,
+            label_filter,
+            conn,
+        );
+        link_suggestions.extend(label_suggestions);
+    }
+
+    link_suggestions
+}
+
+async fn process_links_command(language: &str, title: &str) -> io::Result<()> {
+    let mut parser = WikiText::new().unwrap();
+
+    let mut wikitext = fetch_wikipedia_wikitext(language, title).await.unwrap();
+    wikitext.push('\n');
+    let existing_links = parser.extract_links(wikitext.as_str()).unwrap();
+    let text_segments = parser.extract_text(wikitext.as_str()).unwrap();
+    dbg!(&existing_links);
+
+    // Load bloom filters
+    let (title_filter, label_filter) = load_bloom_filters(language);
+
+    // Open database connection
+    let conn = open_database(language);
+
+    // Process all text segments
+    let link_suggestions = process_text_segments(
+        text_segments,
+        &title_filter,
+        &label_filter,
+        &conn,
+    );
+
+    // Print filtered link suggestions
+    println!("Link suggestions:");
+    let filtered_suggestions = filter_suggestions(link_suggestions, existing_links, title);
+    for suggestion in &filtered_suggestions {
+        println!("{suggestion}");
+    }
+
+    Ok(())
+}
+
 // The main function where the program execution begins.
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -46,106 +225,7 @@ async fn main() -> io::Result<()> {
     // Match the subcommand to determine which operation to perform.
     match &cli.command {
         Commands::Links { language, title } => {
-            let mut parser = WikiText::new().unwrap();
-
-            let mut wikitext = fetch_wikipedia_wikitext(language, title).await.unwrap();
-            wikitext.push('\n');
-            let existing_links = parser.extract_links(wikitext.as_str()).unwrap();
-            let text_segments = parser.extract_text(wikitext.as_str()).unwrap();
-            dbg!(&existing_links);
-
-            // Load the bloom filter
-            let link_title_bloom_filter_file = PathBuf::from(format!("bloom/{language}wiki.bloom"));
-            let link_title_filter_manager =
-                BloomFilterManager::load_from_file(&link_title_bloom_filter_file)
-                    .unwrap_or_else(|_| panic!("Error reading file bloom/{language}wiki.bloom"));
-            let link_label_bloom_filter_file =
-                PathBuf::from(format!("bloom/{language}wiki.labels.bloom"));
-            let link_label_filter_manager = BloomFilterManager::load_from_file(
-                &link_label_bloom_filter_file,
-            )
-            .unwrap_or_else(|_| panic!(" Error reading file bloom/{language}wiki.labels.bloom"));
-
-            // Open the database connection
-            let db_path = format!("anchor-dictionaries/{language}wiki.sqlite");
-            let conn = Connection::open(&db_path)
-                .unwrap_or_else(|_| panic!("Error opening database {db_path}"));
-
-            let mut link_suggestions = Vec::new();
-
-            for segment in text_segments {
-                let link_candidates = segment.link_candidates();
-
-                // Filter candidates through the bloom filter
-                let filtered_title_candidates: Vec<String> = link_candidates
-                    .clone()
-                    .into_iter()
-                    .filter(|candidate| {
-                        let wiki_title = WikiTitle::new(candidate);
-                        let normalized_title = wiki_title.normalized();
-                        link_title_filter_manager.exist(normalized_title)
-                    })
-                    .collect();
-
-                // Create LinkSuggestion for each filtered candidate
-                for candidate in filtered_title_candidates {
-                    let wiki_title = WikiTitle::new(&candidate);
-                    link_suggestions.push(LinkSuggestion::new(
-                        segment.clone(),
-                        wiki_title,
-                        candidate,
-                    ));
-                }
-                let filtered_label_candidates: Vec<String> = link_candidates
-                    .into_iter()
-                    .filter(|candidate| link_label_filter_manager.exist(candidate))
-                    .collect();
-
-                for candidate in filtered_label_candidates {
-                    // Query links table for link_title where link_label = candidate
-                    let mut stmt = conn
-                        .prepare(
-                            "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10",
-                        )
-                        .unwrap();
-                    let link_results: Result<Vec<(String, i32)>, _> = stmt
-                        .query_map([&candidate], |row| {
-                            Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
-                        })
-                        .unwrap()
-                        .collect();
-
-                    if let Ok(results) = link_results {
-                        if let Some((_, first_freq)) = results.first() {
-                            if *first_freq == 1 {
-                                continue;
-                            }
-                        }
-                        
-                        if results.len() > 1 {
-                            // Looks like link_label can mean many things.
-                            // Skip.
-                            dbg!("Skip {candidate}", candidate);
-                            continue;
-                        }
-                        for (link_title, _) in results {
-                            let wiki_title = WikiTitle::new(&link_title);
-                            link_suggestions.push(LinkSuggestion::new(
-                                segment.clone(),
-                                wiki_title,
-                                candidate.clone(),
-                            ));
-                        }
-                    }
-                }
-            }
-
-            // Print all link suggestions using the Display trait
-            println!("Link suggestions:");
-            let link_suggestions = filter_suggestions(link_suggestions, existing_links, title);
-            for suggestion in &link_suggestions {
-                println!("{suggestion}");
-            }
+            process_links_command(language, title).await?;
         }
     }
 
