@@ -71,20 +71,33 @@ async fn main() -> io::Result<()> {
                 let link_candidates = segment.link_candidates();
 
                 // Filter candidates through the bloom filter
-                // Find all text_segments that are present in title or labels filter.
-                let filtered_candidates: Vec<String> = link_candidates
+                let filtered_title_candidates: Vec<String> = link_candidates
                     .into_iter()
                     .filter(|candidate| {
                         let wiki_title = WikiTitle::new(candidate);
                         let normalized_title = wiki_title.normalized();
                         link_title_filter_manager.exist(normalized_title)
-                            || link_label_filter_manager.exist(candidate)
                     })
                     .collect();
 
                 // Create LinkSuggestion for each filtered candidate
-                for candidate in filtered_candidates {
+                for candidate in filtered_title_candidates {
                     let wiki_title = WikiTitle::new(&candidate);
+                    link_suggestions.push(LinkSuggestion::new(
+                        segment.clone(),
+                        wiki_title,
+                        candidate,
+                    ));
+                }
+                let filtered_label_candidates: Vec<String> = link_candidates
+                    .into_iter()
+                    .filter(|candidate| link_label_filter_manager.exist(candidate))
+                    .collect();
+
+                for candidate in filtered_label_candidates {
+                    // Query links table for link_title where link_label = candidate
+                    // using rusqlite and database as anchor-dictionaries/languagewiki.sqlite. AI!
+                    let wiki_title = WikiTitle::new(&link_title);
                     link_suggestions.push(LinkSuggestion::new(
                         segment.clone(),
                         wiki_title,
