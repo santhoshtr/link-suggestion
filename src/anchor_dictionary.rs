@@ -84,6 +84,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "CREATE INDEX IF NOT EXISTS idx_article_title ON links(article_title)",
             [],
         )?;
+        // For querying by link_label
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_link_label ON links(link_label)",
+            [],
+        )?;
 
         Some(conn)
     } else {
