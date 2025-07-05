@@ -101,7 +101,7 @@ fn query_link_titles_for_label(
     candidate: &str,
 ) -> rusqlite::Result<Vec<(String, i32)>> {
     let mut stmt = conn.prepare(
-        "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10",
+        "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1  COLLATE NOCASE GROUP by link_title ORDER BY freq DESC LIMIT 10",
     )?;
 
     let results: Result<Vec<(String, i32)>, _> = stmt
@@ -114,14 +114,13 @@ fn query_link_titles_for_label(
 }
 
 fn should_skip_label_results(results: &[(String, i32)]) -> bool {
+    if results.len() > 1 {
+        return true;
+    }
     if let Some((_, first_freq)) = results.first() {
         if *first_freq == 1 {
             return true;
         }
-    }
-
-    if results.len() > 1 {
-        return true;
     }
 
     false
@@ -173,7 +172,7 @@ fn process_text_segments(
 
     for segment in text_segments {
         let link_candidates = segment.link_candidates();
-
+        // remove duplicates from link_candidates. AI!
         // Process title candidates
         let title_suggestions =
             process_title_candidates(&segment, link_candidates.clone(), title_filter, conn);
