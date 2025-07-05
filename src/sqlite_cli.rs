@@ -1,37 +1,52 @@
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use rusqlite::{Connection, Result};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
-
 struct Cli {
-    #[command(subcommand)]
-    command: Commands,
+    /// Path to the SQLite database file
+
+    #[arg(short, long)]
+    database: PathBuf,
+
+    /// SQL query to execute
+    #[arg(short, long)]
+    query: String,
 }
 
-#[derive(Subcommand, Debug)]
-
-enum Commands {
-    /// Extract distinct link labels from the links table
-    ExtractLabels {
-        /// Path to the SQLite database file
-
-        #[arg(short, long, value_name = "FILE")]
-        database: PathBuf,
-    },
-}
-
-fn extract_distinct_labels(db_path: &PathBuf) -> Result<()> {
+fn execute_query(db_path: &PathBuf, query: &str) -> Result<()> {
     let conn = Connection::open(db_path)?;
 
-    let mut stmt = conn.prepare("SELECT DISTINCT link_label FROM links")?;
+    let mut stmt = conn.prepare(query)?;
 
-    let label_iter = stmt.query_map([], |row| Ok(row.get::<_, String>(0)?))?;
+    let column_count = stmt.column_count();
+    let column_names: Vec<String> = (0..column_count)
+        .map(|i| stmt.column_name(i).unwrap_or("").to_string())
+        .collect();
 
-    for label in label_iter {
-        println!("{}", label?);
+    let rows = stmt.query_map([], |row| {
+        let mut values = Vec::new();
+        for i in 0..column_count {
+            let value: String = match row.get(i) {
+                Ok(val) => val,
+                Err(_) => "NULL".to_string(),
+            };
+            values.push(value);
+        }
+        Ok(values)
+    })?;
+
+    // Print column headers
+    if !column_names.is_empty() {
+        println!("{}", column_names.join("\t"));
+    }
+
+    // Print rows
+    for row in rows {
+        let values = row?;
+        println!("{}", values.join("\t"));
     }
 
     Ok(())
@@ -40,11 +55,7 @@ fn extract_distinct_labels(db_path: &PathBuf) -> Result<()> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    match &cli.command {
-        Commands::ExtractLabels { database } => {
-            extract_distinct_labels(database)?;
-        }
-    }
+    execute_query(&cli.database, &cli.query)?;
 
     Ok(())
 }

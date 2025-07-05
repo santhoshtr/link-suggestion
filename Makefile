@@ -21,7 +21,7 @@ titles/%.titles.list:
 	echo $(PAGEQUERY) | analytics-mysql $* > $@
 
 titles/%.labels.list: anchor-dictionaries/%.sqlite
-	./target/release/sqlite-cli extract-labels --database $< > $@
+	./target/release/sqlite-cli --database $< --query "SELECT DISTINCT link_label FROM links" > $@
 	
 bloom/%.bloom: titles/%.titles.list
 	./target/release/bloom-builder build -i titles/$*.titles.list -o $@
