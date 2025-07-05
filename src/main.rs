@@ -1,6 +1,7 @@
 // Import necessary crates for command-line argument parsing.
 use clap::{Parser, Subcommand};
 use link_suggestion::{LinkSuggestion, filter_suggestions};
+use rusqlite::Connection;
 use std::io;
 use std::path::PathBuf;
 use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
@@ -65,6 +66,11 @@ async fn main() -> io::Result<()> {
             )
             .unwrap_or_else(|_| panic!(" Error reading file bloom/{language}wiki.labels.bloom"));
 
+            // Open the database connection
+            let db_path = format!("anchor-dictionaries/{language}wiki.sqlite");
+            let conn = Connection::open(&db_path)
+                .unwrap_or_else(|_| panic!("Error opening database {db_path}"));
+
             let mut link_suggestions = Vec::new();
 
             for segment in text_segments {
@@ -72,6 +78,7 @@ async fn main() -> io::Result<()> {
 
                 // Filter candidates through the bloom filter
                 let filtered_title_candidates: Vec<String> = link_candidates
+                    .clone()
                     .into_iter()
                     .filter(|candidate| {
                         let wiki_title = WikiTitle::new(candidate);
@@ -96,13 +103,21 @@ async fn main() -> io::Result<()> {
 
                 for candidate in filtered_label_candidates {
                     // Query links table for link_title where link_label = candidate
-                    // using rusqlite and database as anchor-dictionaries/languagewiki.sqlite. AI!
-                    let wiki_title = WikiTitle::new(&link_title);
-                    link_suggestions.push(LinkSuggestion::new(
-                        segment.clone(),
-                        wiki_title,
-                        candidate,
-                    ));
+                    let mut stmt = conn.prepare("SELECT link_title FROM links WHERE link_label = ?1").unwrap();
+                    let link_titles: Result<Vec<String>, _> = stmt.query_map([&candidate], |row| {
+                        Ok(row.get::<_, String>(0)?)
+                    }).unwrap().collect();
+                    
+                    if let Ok(titles) = link_titles {
+                        for link_title in titles {
+                            let wiki_title = WikiTitle::new(&link_title);
+                            link_suggestions.push(LinkSuggestion::new(
+                                segment.clone(),
+                                wiki_title,
+                                candidate.clone(),
+                            ));
+                        }
+                    }
                 }
             }
 
