@@ -39,8 +39,7 @@ impl BloomFilterManager {
         }
 
         println!(
-            "Building Bloom filter with calculated capacity {} and false positive probability {}",
-            capacity, false_positive_probability
+            "Building Bloom filter with calculated capacity {capacity} and false positive probability {false_positive_probability}"
         );
 
         // Create a new Bloom filter with the calculated capacity and false positive probability.
@@ -60,7 +59,7 @@ impl BloomFilterManager {
                 added_count += 1;
             }
         }
-        println!("Added {} unique lines to the Bloom filter.", added_count);
+        println!("Added {added_count} unique lines to the Bloom filter.");
 
         Ok(BloomFilterManager { bloom })
     }
@@ -73,7 +72,7 @@ impl BloomFilterManager {
     /// # Returns
     /// A new `BloomFilterManager` instance containing the loaded filter.
     pub fn load_from_file(filter_file: &PathBuf) -> io::Result<Self> {
-        println!("Loading Bloom filter from {:?}", filter_file);
+        println!("Loading Bloom filter from {filter_file:?}");
 
         // Open the serialized Bloom filter file.
         let mut file = File::open(filter_file)?;
@@ -84,8 +83,7 @@ impl BloomFilterManager {
         // Reconstruct the Bloom filter from the raw bytes.
         let bloom = Bloom::from_slice(&bytes).map_err(|e| {
             std::io::Error::other(format!(
-                "Failed to reconstruct Bloom filter from bytes: {}",
-                e
+                "Failed to reconstruct Bloom filter from bytes: {e}",
             ))
         })?;
 
@@ -119,16 +117,15 @@ impl BloomFilterManager {
     /// # Arguments
     /// * `word` - The word to check.
     pub fn check_word_with_output(&self, word: &str) {
-        println!("Checking for word: \"{}\"", word);
+        println!("Checking for word: \"{word}\"");
 
         // Check if the word is potentially in the Bloom filter.
         if self.check_word(word) {
             println!(
-                "The word \"{}\" is PROBABLY in the filter (due to false positives, this is not 100% certain).",
-                word
+                "The word \"{word}\" is PROBABLY in the filter (due to false positives, this is not 100% certain)."
             );
         } else {
-            println!("The word \"{}\" is DEFINITELY NOT in the filter.", word);
+            println!("The word \"{word}\" is DEFINITELY NOT in the filter.");
         }
     }
 }

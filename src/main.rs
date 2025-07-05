@@ -27,7 +27,7 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     /// Builds a Bloom filter from lines in a file and serializes it to disk.
-    Build {
+    BuildBloom {
         /// Path to the input file containing words (one per line).
         #[arg(short, long, value_name = "FILE")]
         input_file: PathBuf,
@@ -36,13 +36,13 @@ enum Commands {
         #[arg(short, long, value_name = "FILE")]
         output_filter: PathBuf,
 
-        /// Desired false positive probability (e.g., 0.01 for 1%).
+        /// Desired false positive probability (e.g., 0.001 for .1% or one-in-thousand)
         /// A smaller probability will result in a larger filter.
-        #[arg(short, long, default_value = "0.01")]
+        #[arg(short, long, default_value = "0.001")]
         false_positive_probability: f64,
     },
     /// Checks if a word exists in a previously built Bloom filter.
-    Check {
+    CheckBloom {
         /// Path to the serialized Bloom filter file.
         #[arg(short, long, value_name = "FILE")]
         filter_file: PathBuf,
@@ -72,7 +72,7 @@ async fn main() -> io::Result<()> {
 
     // Match the subcommand to determine which operation to perform.
     match &cli.command {
-        Commands::Build {
+        Commands::BuildBloom {
             input_file,
             output_filter,
             false_positive_probability,
@@ -84,9 +84,9 @@ async fn main() -> io::Result<()> {
             // Save the filter to the output file.
             filter_manager.save_to_file(output_filter)?;
 
-            println!("Bloom filter built and saved to {:?}", output_filter);
+            println!("Bloom filter built and saved to {output_filter:?}");
         }
-        Commands::Check { filter_file, word } => {
+        Commands::CheckBloom { filter_file, word } => {
             // Load the Bloom filter from file.
             let filter_manager = BloomFilterManager::load_from_file(filter_file)?;
 
@@ -139,7 +139,7 @@ async fn main() -> io::Result<()> {
             println!("Link suggestions:");
             let link_suggestions = filter_suggestions(link_suggestions, existing_links, title);
             for suggestion in &link_suggestions {
-                println!("{}", suggestion);
+                println!("{suggestion}");
             }
         }
     }
