@@ -96,17 +96,35 @@ fn process_title_candidates(
     suggestions
 }
 
-fn query_link_titles_for_label(
+fn query_link_titles_for_labels_batch(
     conn: &Connection,
-    candidate: &str,
-) -> rusqlite::Result<Vec<(String, i32)>> {
-    let mut stmt = conn.prepare(
-        "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1  COLLATE NOCASE GROUP by link_title ORDER BY freq DESC LIMIT 10",
-    )?;
+    candidates: &[String],
+) -> rusqlite::Result<Vec<(String, String, i32)>> {
+    if candidates.is_empty() {
+        return Ok(vec![]);
+    }
 
-    let results: Result<Vec<(String, i32)>, _> = stmt
-        .query_map([candidate], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+    // Create placeholders for the IN clause
+    let placeholders: Vec<&str> = candidates.iter().map(|_| "?").collect();
+    let placeholders_str = placeholders.join(",");
+    
+    let query = format!(
+        "SELECT link_label, link_title, count(link_title) as freq FROM links WHERE link_label IN ({}) COLLATE NOCASE GROUP by link_label, link_title ORDER BY link_label, freq DESC",
+        placeholders_str
+    );
+
+    let mut stmt = conn.prepare(&query)?;
+    
+    // Convert candidates to rusqlite::types::Value for parameter binding
+    let params: Vec<&dyn rusqlite::ToSql> = candidates.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+    
+    let results: Result<Vec<(String, String, i32)>, _> = stmt
+        .query_map(&params[..], |row| {
+            Ok((
+                row.get::<_, String>(0)?, // link_label
+                row.get::<_, String>(1)?, // link_title
+                row.get::<_, i32>(2)?     // freq
+            ))
         })?
         .collect();
 
@@ -139,11 +157,25 @@ fn process_label_candidates(
         .filter(|candidate| label_filter.exist(candidate))
         .collect();
 
-    for candidate in filtered_candidates {
-        if let Ok(results) = query_link_titles_for_label(conn, &candidate) {
+    if filtered_candidates.is_empty() {
+        return suggestions;
+    }
+
+    // Query all candidates at once
+    if let Ok(batch_results) = query_link_titles_for_labels_batch(conn, &filtered_candidates) {
+        // Group results by label
+        use std::collections::HashMap;
+        let mut grouped_results: HashMap<String, Vec<(String, i32)>> = HashMap::new();
+        
+        for (label, title, freq) in batch_results {
+            grouped_results.entry(label).or_insert_with(Vec::new).push((title, freq));
+        }
+
+        // Process each label's results
+        for (label, results) in grouped_results {
             if should_skip_label_results(&results) {
                 if results.len() > 1 {
-                    dbg!("Skip {candidate}", &candidate);
+                    dbg!("Skip {label}", &label);
                 }
                 continue;
             }
@@ -153,7 +185,7 @@ fn process_label_candidates(
                 suggestions.push(LinkSuggestion::new(
                     segment.clone(),
                     wiki_title,
-                    candidate.clone(),
+                    label.clone(),
                 ));
             }
         }
