@@ -171,8 +171,10 @@ fn process_text_segments(
     let mut link_suggestions = Vec::new();
 
     for segment in text_segments {
-        let link_candidates = segment.link_candidates();
-        // remove duplicates from link_candidates. AI!
+        let mut link_candidates = segment.link_candidates();
+        link_candidates.sort();
+        link_candidates.dedup();
+        
         // Process title candidates
         let title_suggestions =
             process_title_candidates(&segment, link_candidates.clone(), title_filter, conn);
