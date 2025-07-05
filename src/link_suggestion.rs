@@ -98,7 +98,7 @@ pub fn filter_suggestions(
         .into_iter()
         .filter(|candidate| {
             let normalized = candidate.title.normalized();
-
+            let label = candidate.label.as_str();
             // Deduplicate based on normalized title
             if !seen_titles.insert(normalized.to_string()) {
                 return false;
@@ -108,12 +108,15 @@ pub fn filter_suggestions(
             if normalized.chars().all(|c| c.is_ascii_digit()) {
                 return false;
             }
+            if label.chars().all(|c| c.is_ascii_digit()) {
+                return false;
+            }
 
             // Remove if title is single letter
             if normalized.len() == 1 {
                 return false;
             }
-            if candidate.label.len() == 1 {
+            if label.len() == 1 {
                 return false;
             }
 
