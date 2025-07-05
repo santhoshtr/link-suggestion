@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use std::io;
 use std::path::PathBuf;
 use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
-use wikitext::{WikiText, TextSegment};
+use wikitext::{TextSegment, WikiText};
 
 mod bloom_filter;
 mod link_suggestion;
@@ -42,21 +42,18 @@ fn load_bloom_filters(language: &str) -> (BloomFilterManager, BloomFilterManager
     let link_title_filter_manager =
         BloomFilterManager::load_from_file(&link_title_bloom_filter_file)
             .unwrap_or_else(|_| panic!("Error reading file bloom/{language}wiki.bloom"));
-    
-    let link_label_bloom_filter_file =
-        PathBuf::from(format!("bloom/{language}wiki.labels.bloom"));
-    let link_label_filter_manager = BloomFilterManager::load_from_file(
-        &link_label_bloom_filter_file,
-    )
-    .unwrap_or_else(|_| panic!(" Error reading file bloom/{language}wiki.labels.bloom"));
+
+    let link_label_bloom_filter_file = PathBuf::from(format!("bloom/{language}wiki.labels.bloom"));
+    let link_label_filter_manager =
+        BloomFilterManager::load_from_file(&link_label_bloom_filter_file)
+            .unwrap_or_else(|_| panic!(" Error reading file bloom/{language}wiki.labels.bloom"));
 
     (link_title_filter_manager, link_label_filter_manager)
 }
 
 fn open_database(language: &str) -> Connection {
     let db_path = format!("anchor-dictionaries/{language}wiki.sqlite");
-    Connection::open(&db_path)
-        .unwrap_or_else(|_| panic!("Error opening database {db_path}"))
+    Connection::open(&db_path).unwrap_or_else(|_| panic!("Error opening database {db_path}"))
 }
 
 fn process_title_candidates(
@@ -65,7 +62,7 @@ fn process_title_candidates(
     title_filter: &BloomFilterManager,
 ) -> Vec<LinkSuggestion> {
     let mut suggestions = Vec::new();
-    
+
     let filtered_candidates: Vec<String> = candidates
         .into_iter()
         .filter(|candidate| {
@@ -77,27 +74,30 @@ fn process_title_candidates(
 
     for candidate in filtered_candidates {
         let wiki_title = WikiTitle::new(&candidate);
-        suggestions.push(LinkSuggestion::new(
-            segment.clone(),
-            wiki_title,
-            candidate,
-        ));
+        // Accont for the false positives in the bloom filter.
+        // Now that we have short listed candidate list, make sure they are
+        // indeed valid titles. Query the database see existance of link_title
+        // matching the normalized title. AI!
+        suggestions.push(LinkSuggestion::new(segment.clone(), wiki_title, candidate));
     }
-    
+
     suggestions
 }
 
-fn query_link_titles_for_label(conn: &Connection, candidate: &str) -> rusqlite::Result<Vec<(String, i32)>> {
+fn query_link_titles_for_label(
+    conn: &Connection,
+    candidate: &str,
+) -> rusqlite::Result<Vec<(String, i32)>> {
     let mut stmt = conn.prepare(
         "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10",
     )?;
-    
+
     let results: Result<Vec<(String, i32)>, _> = stmt
         .query_map([candidate], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
         })?
         .collect();
-    
+
     results
 }
 
@@ -107,11 +107,11 @@ fn should_skip_label_results(results: &[(String, i32)]) -> bool {
             return true;
         }
     }
-    
+
     if results.len() > 1 {
         return true;
     }
-    
+
     false
 }
 
@@ -122,7 +122,7 @@ fn process_label_candidates(
     conn: &Connection,
 ) -> Vec<LinkSuggestion> {
     let mut suggestions = Vec::new();
-    
+
     let filtered_candidates: Vec<String> = candidates
         .into_iter()
         .filter(|candidate| label_filter.exist(candidate))
@@ -136,7 +136,7 @@ fn process_label_candidates(
                 }
                 continue;
             }
-            
+
             for (link_title, _) in results {
                 let wiki_title = WikiTitle::new(&link_title);
                 suggestions.push(LinkSuggestion::new(
@@ -147,7 +147,7 @@ fn process_label_candidates(
             }
         }
     }
-    
+
     suggestions
 }
 
@@ -163,20 +163,13 @@ fn process_text_segments(
         let link_candidates = segment.link_candidates();
 
         // Process title candidates
-        let title_suggestions = process_title_candidates(
-            &segment,
-            link_candidates.clone(),
-            title_filter,
-        );
+        let title_suggestions =
+            process_title_candidates(&segment, link_candidates.clone(), title_filter);
         link_suggestions.extend(title_suggestions);
 
         // Process label candidates
-        let label_suggestions = process_label_candidates(
-            &segment,
-            link_candidates,
-            label_filter,
-            conn,
-        );
+        let label_suggestions =
+            process_label_candidates(&segment, link_candidates, label_filter, conn);
         link_suggestions.extend(label_suggestions);
     }
 
@@ -199,12 +192,8 @@ async fn process_links_command(language: &str, title: &str) -> io::Result<()> {
     let conn = open_database(language);
 
     // Process all text segments
-    let link_suggestions = process_text_segments(
-        text_segments,
-        &title_filter,
-        &label_filter,
-        &conn,
-    );
+    let link_suggestions =
+        process_text_segments(text_segments, &title_filter, &label_filter, &conn);
 
     // Print filtered link suggestions
     println!("Link suggestions:");
