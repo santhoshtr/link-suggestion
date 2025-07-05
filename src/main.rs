@@ -56,10 +56,16 @@ fn open_database(language: &str) -> Connection {
     Connection::open(&db_path).unwrap_or_else(|_| panic!("Error opening database {db_path}"))
 }
 
+fn title_exists_in_database(conn: &Connection, normalized_title: &str) -> bool {
+    let mut stmt = conn.prepare("SELECT 1 FROM links WHERE link_title = ?1 LIMIT 1").unwrap();
+    stmt.exists([normalized_title]).unwrap_or(false)
+}
+
 fn process_title_candidates(
     segment: &TextSegment,
     candidates: Vec<String>,
     title_filter: &BloomFilterManager,
+    conn: &Connection,
 ) -> Vec<LinkSuggestion> {
     let mut suggestions = Vec::new();
 
@@ -74,11 +80,15 @@ fn process_title_candidates(
 
     for candidate in filtered_candidates {
         let wiki_title = WikiTitle::new(&candidate);
-        // Accont for the false positives in the bloom filter.
+        let normalized_title = wiki_title.normalized();
+        
+        // Account for the false positives in the bloom filter.
         // Now that we have short listed candidate list, make sure they are
-        // indeed valid titles. Query the database see existance of link_title
-        // matching the normalized title. AI!
-        suggestions.push(LinkSuggestion::new(segment.clone(), wiki_title, candidate));
+        // indeed valid titles. Query the database see existence of link_title
+        // matching the normalized title.
+        if title_exists_in_database(conn, normalized_title) {
+            suggestions.push(LinkSuggestion::new(segment.clone(), wiki_title, candidate));
+        }
     }
 
     suggestions
@@ -164,7 +174,7 @@ fn process_text_segments(
 
         // Process title candidates
         let title_suggestions =
-            process_title_candidates(&segment, link_candidates.clone(), title_filter);
+            process_title_candidates(&segment, link_candidates.clone(), title_filter, conn);
         link_suggestions.extend(title_suggestions);
 
         // Process label candidates
