@@ -113,6 +113,9 @@ pub fn filter_suggestions(
             if normalized.len() == 1 {
                 return false;
             }
+            if candidate.label.len() == 1 {
+                return false;
+            }
 
             // Remove candidates that are already present in existing WikiLinks
             if existing_links
@@ -132,6 +135,9 @@ pub fn filter_suggestions(
             let stopwords = STOP_WORDS;
             let lower_title = normalized.to_lowercase();
             if stopwords.contains(&lower_title.as_str()) {
+                return false;
+            }
+            if stopwords.contains(&candidate.label.as_str()) {
                 return false;
             }
 
