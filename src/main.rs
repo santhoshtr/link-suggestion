@@ -108,21 +108,27 @@ async fn main() -> io::Result<()> {
                             "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10",
                         )
                         .unwrap();
-                    // Update below code as per above query.
-                    // And skip if freq of first record is 1. AI!
-                    let link_titles: Result<Vec<String>, _> = stmt
-                        .query_map([&candidate], |row| Ok(row.get::<_, String>(0)?))
+                    let link_results: Result<Vec<(String, i32)>, _> = stmt
+                        .query_map([&candidate], |row| {
+                            Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?))
+                        })
                         .unwrap()
                         .collect();
 
-                    if let Ok(titles) = link_titles {
-                        if titles.len() > 1 {
+                    if let Ok(results) = link_results {
+                        if let Some((_, first_freq)) = results.first() {
+                            if *first_freq == 1 {
+                                continue;
+                            }
+                        }
+                        
+                        if results.len() > 1 {
                             // Looks like link_label can mean many things.
                             // Skip.
                             dbg!("Skip {candidate}", candidate);
                             continue;
                         }
-                        for link_title in titles {
+                        for (link_title, _) in results {
                             let wiki_title = WikiTitle::new(&link_title);
                             link_suggestions.push(LinkSuggestion::new(
                                 segment.clone(),
