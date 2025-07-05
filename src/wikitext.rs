@@ -169,13 +169,12 @@ impl TextSegment {
                 word.trim_matches(|c: char| c.is_ascii_punctuation())
                     .to_lowercase()
             })
-            .filter(|word| !word.is_empty())
+            .filter(|word| {
+                !word.is_empty() 
+                    && word.len() > 1  // Remove single letter words
+                    && !word.parse::<f64>().is_ok()  // Remove words that are numbers (including decimals)
+            })
             .collect()
-
-        // Add more filters here:
-        // 1. Remove single letter words
-        // 2. Remove words that are numbers. Including decimals
-        // AI!
     }
 
     pub fn bigrams(&self) -> Vec<String> {
