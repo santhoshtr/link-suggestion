@@ -20,8 +20,14 @@ init:
 titles/%.titles.list:
 	echo $(PAGEQUERY) | analytics-mysql $* > $@
 
+titles/%.labels.list: anchor-dictionaries/%.sqlite
+	./target/release/sqlite-cli extract-labels --database $< > $@
+	
 bloom/%.bloom: titles/%.titles.list
-	./target/release/bloom-builder build-bloom -i titles/$*.titles.list -o $@
+	./target/release/bloom-builder build -i titles/$*.titles.list -o $@
+
+bloom/%.labels.bloom: titles/%.labels.list
+	./target/release/bloom-builder build -i titles/$*.labels.list -o $@
 
 /tmp/%.all-articles.xml:
 	bunzip2 < /mnt/data/xmldatadumps/public/$*/latest/$*-latest-pages-articles.xml.bz2 > $@

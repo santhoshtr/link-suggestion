@@ -15,6 +15,11 @@ path = "src/anchor_dictionary.rs"
 name = "bloom-builder"
 path = "src/bloom_filter.rs"
 
+[[bin]]
+name = "sqlite-cli"
+path = "src/sqlite_cli.rs"
+
+
 [dependencies]
 tree-sitter-wikitext = { git = "https://github.com/santhoshtr/tree-sitter-wikitext", rev = "8f4e50b7" }
 bloomfilter = "3.0.1"
@@ -27,6 +32,7 @@ tokio = { version = "1.0", features = ["full"] }
 serde_json = "1.0"
 quick-xml = { version = "0.38", features = [
   "encoding",
+  "serialize",
   "escape-html",
   "overlapped-lists",
 ] }
