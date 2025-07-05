@@ -104,14 +104,24 @@ async fn main() -> io::Result<()> {
                 for candidate in filtered_label_candidates {
                     // Query links table for link_title where link_label = candidate
                     let mut stmt = conn
-                        .prepare("SELECT link_title FROM links WHERE link_label = ?1")
+                        .prepare(
+                            "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10",
+                        )
                         .unwrap();
+                    // Update below code as per above query.
+                    // And skip if freq of first record is 1. AI!
                     let link_titles: Result<Vec<String>, _> = stmt
                         .query_map([&candidate], |row| Ok(row.get::<_, String>(0)?))
                         .unwrap()
                         .collect();
 
                     if let Ok(titles) = link_titles {
+                        if titles.len() > 1 {
+                            // Looks like link_label can mean many things.
+                            // Skip.
+                            dbg!("Skip {candidate}", candidate);
+                            continue;
+                        }
                         for link_title in titles {
                             let wiki_title = WikiTitle::new(&link_title);
                             link_suggestions.push(LinkSuggestion::new(
