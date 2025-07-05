@@ -153,7 +153,6 @@ pub async fn fetch_wikipedia_wikitext(
     );
 
     let client = reqwest::Client::new();
-    dbg!(&url);
     let response = client
         .get(&url)
         .header(

@@ -4,12 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "bloom-wiki"
+name = "link-suggestion"
 path = "src/main.rs"
 
 [[bin]]
 name = "anchor-dictionary"
 path = "src/anchor_dictionary.rs"
+
+[[bin]]
+name = "bloom-builder"
+path = "src/bloom_filter.rs"
 
 [dependencies]
 tree-sitter-wikitext = { git = "https://github.com/santhoshtr/tree-sitter-wikitext", rev = "8f4e50b7" }
@@ -21,7 +25,7 @@ lazy_static = "1.5.0"
 reqwest = { version = "0.12", features = ["json"] }
 tokio = { version = "1.0", features = ["full"] }
 serde_json = "1.0"
-quick-xml = { version = "0.37.5", features = [
+quick-xml = { version = "0.38", features = [
   "encoding",
   "escape-html",
   "overlapped-lists",

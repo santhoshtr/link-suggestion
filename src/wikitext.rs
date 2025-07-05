@@ -98,7 +98,6 @@ impl WikiText {
                 for capture in mat.captures {
                     let capture_name = &self.link_query.capture_names()[capture.index as usize];
                     let node_text = get_node_text(capture.node, wikitext);
-                    dbg!(&node_text);
 
                     match *capture_name {
                         "link.title" => {

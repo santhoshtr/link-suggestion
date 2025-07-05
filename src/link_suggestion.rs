@@ -71,7 +71,7 @@ impl fmt::Display for LinkSuggestion {
 
         // Print the edit positions for tree-sitter
         if let Some((start, end, replacement)) = self.calculate_link_edit_positions() {
-            writeln!(f, "Edit: bytes {}..{} -> '{}'", start, end, replacement)?;
+            writeln!(f, "Edit: bytes {start}..{end} -> '{replacement}'",)?;
         }
         write!(f, "---")
     }

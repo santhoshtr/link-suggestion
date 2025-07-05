@@ -1,5 +1,8 @@
+# =========================================================
 # NOTE: This Makefile is optimized for parallel execution.
 # Run with `make -j` to use all CPU cores.
+# =========================================================
+
 # Query to find all page titles
 PAGEQUERY := "select page_title from page where page_namespace=0 and page_is_redirect = 0"
 wikipedia.list:
@@ -8,33 +11,33 @@ wikipedia.list:
 	sed -i '/^arbcom/d' $@
 	rm closed.dblist
 
-# Create required directories
 init:
 	cargo build --profile=release 
 	mkdir -p titles
 	mkdir -p bloom
-	mkdir -p anchrordictionary
+	mkdir -p anchor-dictionaries
 
-# Pattern rule for generating .titles.list files
 titles/%.titles.list:
 	echo $(PAGEQUERY) | analytics-mysql $* > $@
 
 bloom/%.bloom: titles/%.titles.list
-	./target/release/bloom-wiki build-bloom -i titles/$*.titles.list -o $@
+	./target/release/bloom-builder build-bloom -i titles/$*.titles.list -o $@
 
-anchrordictionary/%.sqlite:
-	gunzip -c /mnt/data/xmldatadumps/public/$*/latest/$*-latest-all-titles.gz > /tmp/$*-all-titles.xml
-	./target/release/bloom-wiki build-anchor-dictionary /tmp/$*-all-titles.xml -o $@
-	rm /tmp/$*-all-titles.xml
+/tmp/%.all-articles.xml:
+	bunzip2 < /mnt/data/xmldatadumps/public/$*/latest/$*-latest-pages-articles.xml.bz2 > $@
 
-# Generate all targets based on wikipedia.list content
+anchor-dictionaries/%.sqlite: /tmp/%.all-articles.xml
+	./target/release/anchor-dictionary -i /tmp/$*.all-articles.xml --format sqlite -o $@
+
 WIKIS := $(shell cat wikipedia.list)
 WIKI_TARGETS := $(addprefix titles/,$(addsuffix .titles.list,$(WIKIS)))
 WIKI_BLOOM_TARGETS := $(addprefix bloom/, $(addsuffix .bloom,$(WIKIS)))
+WIKI_ANCHOR_DICTIONARIES := $(addprefix anchor-dictionaries/, $(addsuffix .sqlite,$(WIKIS)))
 
 clean:
-	rm -rf bloom titles *.list
+	rm -rf bloom/*.* titles/*.* *.list anchor-dictionaries/*.sqlite
 
-.PHONY: all-titles all-bloom clean
-all-titles: init wikipedia.list $(WIKI_TARGETS)
-all-bloom: init wikipedia.list $(WIKI_BLOOM_TARGETS)
+.PHONY: titles bloom anchor-dictionaries clean
+titles: init wikipedia.list $(WIKI_TARGETS)
+bloom: init wikipedia.list $(WIKI_BLOOM_TARGETS)
+anchor-dictionaries: init $(WIKI_BLOOM_TARGETS)

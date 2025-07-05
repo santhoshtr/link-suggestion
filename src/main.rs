@@ -23,34 +23,9 @@ struct Cli {
     command: Commands,
 }
 
-// Define the subcommands: 'build' and 'check'.
+// Define the subcommands.
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Builds a Bloom filter from lines in a file and serializes it to disk.
-    BuildBloom {
-        /// Path to the input file containing words (one per line).
-        #[arg(short, long, value_name = "FILE")]
-        input_file: PathBuf,
-
-        /// Path to save the serialized Bloom filter.
-        #[arg(short, long, value_name = "FILE")]
-        output_filter: PathBuf,
-
-        /// Desired false positive probability (e.g., 0.001 for .1% or one-in-thousand)
-        /// A smaller probability will result in a larger filter.
-        #[arg(short, long, default_value = "0.001")]
-        false_positive_probability: f64,
-    },
-    /// Checks if a word exists in a previously built Bloom filter.
-    CheckBloom {
-        /// Path to the serialized Bloom filter file.
-        #[arg(short, long, value_name = "FILE")]
-        filter_file: PathBuf,
-
-        /// The word to check for existence in the filter.
-        #[arg(short, long)]
-        word: String,
-    },
     Links {
         /// Wikipedia language code (e.g., "en", "fr", "de").
         #[arg(short, long)]
@@ -72,27 +47,6 @@ async fn main() -> io::Result<()> {
 
     // Match the subcommand to determine which operation to perform.
     match &cli.command {
-        Commands::BuildBloom {
-            input_file,
-            output_filter,
-            false_positive_probability,
-        } => {
-            // Build the Bloom filter from the input file.
-            let filter_manager =
-                BloomFilterManager::build_from_file(input_file, *false_positive_probability)?;
-
-            // Save the filter to the output file.
-            filter_manager.save_to_file(output_filter)?;
-
-            println!("Bloom filter built and saved to {output_filter:?}");
-        }
-        Commands::CheckBloom { filter_file, word } => {
-            // Load the Bloom filter from file.
-            let filter_manager = BloomFilterManager::load_from_file(filter_file)?;
-
-            // Check the word and display the result.
-            filter_manager.check_word_with_output(word);
-        }
         Commands::Links {
             filter_file,
             language,
