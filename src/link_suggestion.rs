@@ -11,14 +11,21 @@ pub struct LinkSuggestion {
     pub text_segment: TextSegment,
     pub title: WikiTitle,
     pub label: String,
+    pub confidence_score: f32,
 }
 
 impl LinkSuggestion {
-    pub fn new(text_segment: TextSegment, title: WikiTitle, label: String) -> Self {
+    pub fn new(
+        text_segment: TextSegment,
+        title: WikiTitle,
+        label: String,
+        confidence_score: f32,
+    ) -> Self {
         LinkSuggestion {
             text_segment,
             title,
             label,
+            confidence_score,
         }
     }
     /// Calculates the byte positions required to convert the label to a wiki internal link.
@@ -73,6 +80,7 @@ impl fmt::Display for LinkSuggestion {
         if let Some((start, end, replacement)) = self.calculate_link_edit_positions() {
             writeln!(f, "Edit: bytes {start}..{end} -> '{replacement}'",)?;
         }
+        writeln!(f, "confidence_score: {}", self.confidence_score);
         write!(f, "---")
     }
 }
@@ -97,6 +105,10 @@ pub fn filter_suggestions(
     candidates
         .into_iter()
         .filter(|candidate| {
+            if candidate.confidence_score < 0.5 {
+                // TODO: Fix this threshold
+                return false;
+            }
             let normalized = candidate.title.normalized();
             let label = candidate.label.as_str();
             // Deduplicate based on normalized title

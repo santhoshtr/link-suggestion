@@ -89,7 +89,13 @@ fn process_title_candidates(
         // indeed valid titles. Query the database see existence of link_title
         // matching the normalized title.
         if title_exists_in_database(conn, normalized_title) {
-            suggestions.push(LinkSuggestion::new(segment.clone(), wiki_title, candidate));
+            let confidence_score = 0.5;
+            suggestions.push(LinkSuggestion::new(
+                segment.clone(),
+                wiki_title,
+                candidate,
+                confidence_score,
+            ));
         }
     }
 
@@ -107,23 +113,25 @@ fn query_link_titles_for_labels_batch(
     // Create placeholders for the IN clause
     let placeholders: Vec<&str> = candidates.iter().map(|_| "?").collect();
     let placeholders_str = placeholders.join(",");
-    
+
     let query = format!(
-        "SELECT link_label, link_title, count(link_title) as freq FROM links WHERE link_label IN ({}) COLLATE NOCASE GROUP by link_label, link_title ORDER BY link_label, freq DESC",
-        placeholders_str
+        "SELECT link_label, link_title, count(link_title) as freq FROM links WHERE link_label IN ({placeholders_str}) COLLATE NOCASE GROUP by link_label, link_title ORDER BY link_label,freq DESC"
     );
 
     let mut stmt = conn.prepare(&query)?;
-    
+
     // Convert candidates to rusqlite::types::Value for parameter binding
-    let params: Vec<&dyn rusqlite::ToSql> = candidates.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
-    
+    let params: Vec<&dyn rusqlite::ToSql> = candidates
+        .iter()
+        .map(|s| s as &dyn rusqlite::ToSql)
+        .collect();
+
     let results: Result<Vec<(String, String, i32)>, _> = stmt
         .query_map(&params[..], |row| {
             Ok((
                 row.get::<_, String>(0)?, // link_label
                 row.get::<_, String>(1)?, // link_title
-                row.get::<_, i32>(2)?     // freq
+                row.get::<_, i32>(2)?,    // freq
             ))
         })?
         .collect();
@@ -136,7 +144,7 @@ fn should_skip_label_results(results: &[(String, i32)]) -> bool {
         return true;
     }
     if let Some((_, first_freq)) = results.first() {
-        if *first_freq == 1 {
+        if *first_freq <= 1 {
             return true;
         }
     }
@@ -166,26 +174,28 @@ fn process_label_candidates(
         // Group results by label
         use std::collections::HashMap;
         let mut grouped_results: HashMap<String, Vec<(String, i32)>> = HashMap::new();
-        
+
         for (label, title, freq) in batch_results {
-            grouped_results.entry(label).or_insert_with(Vec::new).push((title, freq));
+            grouped_results
+                .entry(label)
+                .or_insert_with(Vec::new)
+                .push((title, freq));
         }
 
         // Process each label's results
         for (label, results) in grouped_results {
             if should_skip_label_results(&results) {
-                if results.len() > 1 {
-                    dbg!("Skip {label}", &label);
-                }
                 continue;
             }
 
-            for (link_title, _) in results {
+            for (link_title, freq) in results {
                 let wiki_title = WikiTitle::new(&link_title);
+                let confidence_score = (freq as f32) * 0.1 + 0.1;
                 suggestions.push(LinkSuggestion::new(
                     segment.clone(),
                     wiki_title,
                     label.clone(),
+                    confidence_score,
                 ));
             }
         }
@@ -206,7 +216,7 @@ fn process_text_segments(
         let mut link_candidates = segment.link_candidates();
         link_candidates.sort();
         link_candidates.dedup();
-        
+
         // Process title candidates
         let title_suggestions =
             process_title_candidates(&segment, link_candidates.clone(), title_filter, conn);
