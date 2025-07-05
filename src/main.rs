@@ -57,7 +57,9 @@ fn open_database(language: &str) -> Connection {
 }
 
 fn title_exists_in_database(conn: &Connection, normalized_title: &str) -> bool {
-    let mut stmt = conn.prepare("SELECT 1 FROM links WHERE link_title = ?1 LIMIT 1").unwrap();
+    let mut stmt = conn
+        .prepare("SELECT 1 FROM links WHERE article_title = ?1 LIMIT 1")
+        .unwrap();
     stmt.exists([normalized_title]).unwrap_or(false)
 }
 
@@ -81,7 +83,7 @@ fn process_title_candidates(
     for candidate in filtered_candidates {
         let wiki_title = WikiTitle::new(&candidate);
         let normalized_title = wiki_title.normalized();
-        
+
         // Account for the false positives in the bloom filter.
         // Now that we have short listed candidate list, make sure they are
         // indeed valid titles. Query the database see existence of link_title
@@ -207,7 +209,8 @@ async fn process_links_command(language: &str, title: &str) -> io::Result<()> {
 
     // Print filtered link suggestions
     println!("Link suggestions:");
-    let filtered_suggestions = filter_suggestions(link_suggestions, existing_links, title);
+    let filtered_suggestions =
+        filter_suggestions(link_suggestions, existing_links, &title.to_string());
     for suggestion in &filtered_suggestions {
         println!("{suggestion}");
     }
