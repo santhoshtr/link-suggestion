@@ -33,9 +33,6 @@ enum Commands {
         /// Wikipedia article title.
         #[arg(short, long)]
         title: String,
-        /// Path to the serialized Bloom filter file.
-        #[arg(short, long, value_name = "FILE")]
-        filter_file: PathBuf,
     },
 }
 
@@ -47,11 +44,7 @@ async fn main() -> io::Result<()> {
 
     // Match the subcommand to determine which operation to perform.
     match &cli.command {
-        Commands::Links {
-            filter_file,
-            language,
-            title,
-        } => {
+        Commands::Links { language, title } => {
             let mut parser = WikiText::new().unwrap();
 
             let mut wikitext = fetch_wikipedia_wikitext(language, title).await.unwrap();
@@ -61,7 +54,16 @@ async fn main() -> io::Result<()> {
             dbg!(&existing_links);
 
             // Load the bloom filter
-            let filter_manager = BloomFilterManager::load_from_file(filter_file)?;
+            let link_title_bloom_filter_file = PathBuf::from(format!("bloom/{language}wiki.bloom"));
+            let link_title_filter_manager =
+                BloomFilterManager::load_from_file(&link_title_bloom_filter_file)
+                    .unwrap_or_else(|_| panic!("Error reading file bloom/{language}wiki.bloom"));
+            let link_label_bloom_filter_file =
+                PathBuf::from(format!("bloom/{language}wiki.labels.bloom"));
+            let link_label_filter_manager = BloomFilterManager::load_from_file(
+                &link_label_bloom_filter_file,
+            )
+            .unwrap_or_else(|_| panic!(" Error reading file bloom/{language}wiki.labels.bloom"));
 
             let mut link_suggestions = Vec::new();
 
@@ -69,12 +71,14 @@ async fn main() -> io::Result<()> {
                 let link_candidates = segment.link_candidates();
 
                 // Filter candidates through the bloom filter
+                // Find all text_segments that are present in title or labels filter.
                 let filtered_candidates: Vec<String> = link_candidates
                     .into_iter()
                     .filter(|candidate| {
                         let wiki_title = WikiTitle::new(candidate);
                         let normalized_title = wiki_title.normalized();
-                        filter_manager.check_word(normalized_title)
+                        link_title_filter_manager.exist(normalized_title)
+                            || link_label_filter_manager.exist(candidate)
                     })
                     .collect();
 

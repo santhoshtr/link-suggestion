@@ -73,8 +73,6 @@ impl BloomFilterManager {
     /// # Returns
     /// A new `BloomFilterManager` instance containing the loaded filter.
     pub fn load_from_file(filter_file: &PathBuf) -> io::Result<Self> {
-        println!("Loading Bloom filter from {filter_file:?}");
-
         // Open the serialized Bloom filter file.
         let mut file = File::open(filter_file)?;
         // Read the entire content of the file into a byte vector.
@@ -109,7 +107,7 @@ impl BloomFilterManager {
     ///
     /// # Returns
     /// `true` if the word is probably in the filter, `false` if it's definitely not.
-    pub fn check_word(&self, word: &str) -> bool {
+    pub fn exist(&self, word: &str) -> bool {
         self.bloom.check(word)
     }
 
@@ -121,7 +119,7 @@ impl BloomFilterManager {
         println!("Checking for word: \"{word}\"");
 
         // Check if the word is potentially in the Bloom filter.
-        if self.check_word(word) {
+        if self.exist(word) {
             println!(
                 "The word \"{word}\" is PROBABLY in the filter (due to false positives, this is not 100% certain)."
             );
