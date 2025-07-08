@@ -1,4 +1,6 @@
 use clap::Parser;
+use quick_xml::NsReader;
+use quick_xml::events::Event;
 use rusqlite::Connection;
 use rusqlite::params;
 use std::fs;
@@ -9,7 +11,7 @@ mod wikitext;
 
 #[derive(Parser)]
 struct Args {
-    /// Input file name
+    /// bz2 compressed XML dump file from a wikipedia
     #[arg(short, long)]
     input: String,
 
@@ -130,15 +132,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     };
 
-    // Read the file and pass content to extract_links. No need to read from stdin.
+    // Read the file and pass content to extract_links.
     let file_name = &args.input;
-    use quick_xml::Reader;
-    use quick_xml::events::Event;
-
-    use std::io::BufReader;
-    let file = fs::File::open(file_name)?;
-    let mut reader = Reader::from_reader(BufReader::new(file));
-    reader.config_mut().trim_text(true);
+    let file = std::fs::File::open(file_name).unwrap();
+    let bz2_file = std::io::BufReader::new(file);
+    let decoder = bzip2::bufread::MultiBzDecoder::new(bz2_file);
+    let buffered_reader = std::io::BufReader::new(decoder);
+    let mut xml_reader = NsReader::from_reader(buffered_reader);
+    xml_reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut article = Article {
         text: String::new(),
@@ -151,8 +152,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Extract the text under the <text> node
     loop {
-        match reader.read_event_into(&mut buf) {
-            Err(e) => panic!("Error at position {}: {:?}", reader.error_position(), e),
+        match xml_reader.read_event_into(&mut buf) {
+            Err(e) => panic!("Error at position {}: {:?}", xml_reader.error_position(), e),
             // exits the loop when reaching end of file
             Ok(Event::Eof) => break,
 
@@ -235,7 +236,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         for link in links.iter() {
                             let link_label =
-                                link.label.as_deref().unwrap_or(&link.title.normalized());
+                                link.label.as_deref().unwrap_or(link.title.normalized());
 
                             if let Some(ref mut writer) = tsv_writer {
                                 writeln!(
@@ -282,8 +283,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!(
-        "Articles processed: {}\nLinks collected: {}\nErrors: {}\n",
-        articles_processed, total_links, parsing_errors
+        "Articles processed: {articles_processed}\nLinks collected: {total_links}\nErrors: {parsing_errors}\n",
     );
     Ok(())
 }

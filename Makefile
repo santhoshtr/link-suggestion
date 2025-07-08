@@ -31,11 +31,11 @@ bloom/%.bloom: titles/%.titles.list
 bloom/%.labels.bloom: titles/%.labels.list
 	./target/release/bloom-builder build -i titles/$*.labels.list -o $@
 
-/tmp/%.all-articles.xml:
-	bunzip2 < /mnt/data/xmldatadumps/public/$*/latest/$*-latest-pages-articles.xml.bz2 > $@
-
-anchor-dictionaries/%.sqlite: /tmp/%.all-articles.xml
-	./target/release/anchor-dictionary -i /tmp/$*.all-articles.xml --format sqlite -o $@
+anchor-dictionaries/%.sqlite:
+	./target/release/anchor-dictionary \
+		--input /mnt/data/xmldatadumps/public/$*/latest/$*-latest-pages-articles.xml.bz2 \
+		--format sqlite \
+	  --output $@
 
 WIKIS := $(shell cat wikipedia.list)
 WIKI_TARGETS := $(addprefix titles/,$(addsuffix .titles.list,$(WIKIS)))
@@ -43,10 +43,7 @@ WIKI_BLOOM_TARGETS := $(addprefix bloom/, $(addsuffix .bloom,$(WIKIS)))
 WIKI_BLOOM_LABELS_TARGETS := $(addprefix bloom/, $(addsuffix .labels.bloom,$(WIKIS)))
 WIKI_ANCHOR_DICTIONARIES := $(addprefix anchor-dictionaries/, $(addsuffix .sqlite,$(WIKIS)))
 
-clean:
-	rm -rf bloom/*.* titles/*.* *.list anchor-dictionaries/*.sqlite
-
-.PHONY: titles bloom anchor-dictionaries clean
+.PHONY: titles bloom anchor-dictionaries 
 titles: $(WIKI_TARGETS)
 bloom: $(WIKI_BLOOM_TARGETS) $(WIKI_BLOOM_LABELS_TARGETS)
 anchor-dictionaries: $(WIKI_BLOOM_TARGETS)
