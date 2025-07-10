@@ -92,7 +92,7 @@ impl WikiText {
             let mut links = Vec::new();
             while let Some((mat, _capture_index)) = captures.next() {
                 let mut current_link_label = None;
-                let mut current_link_title: WikiTitle = WikiTitle::new("");
+                let mut current_link_title: WikiTitle = WikiTitle::new("", String::from("en"));
                 let mut current_link_range = mat.captures[0].node.range();
                 // Process all captures in this match
                 for capture in mat.captures {
@@ -103,7 +103,7 @@ impl WikiText {
                         "link.title" => {
                             let title = node_text.trim_matches('"').trim_matches('\'');
                             if !title.contains(':') && !title.contains('.') {
-                                current_link_title = WikiTitle::new(title);
+                                current_link_title = WikiTitle::new(title,String::from("en"));
                                 current_link_range = capture.node.range();
                             }
                         }

@@ -8,21 +8,27 @@ pub struct WikiTitle {
     raw: String,
     /// The normalized title following Wikipedia conventions
     normalized: String,
+    language: String,
 }
 
 impl WikiTitle {
     /// Creates a new WikiTitle from a raw string
-    pub fn new(title: &str) -> Self {
+    pub fn new(title: &str, language: String) -> Self {
         let normalized = Self::normalize_title(title);
         Self {
             raw: title.to_string(),
             normalized,
+            language,
         }
     }
 
     /// Returns the raw (original) title
     pub fn raw(&self) -> &str {
         &self.raw
+    }
+
+    pub fn language(&self) -> &String {
+        &self.language
     }
 
     /// Returns the normalized title
@@ -126,12 +132,6 @@ impl WikiTitle {
         self.namespace().is_none()
     }
 
-    /// Creates a WikiTitle from a URL-encoded string
-    pub fn from_url_encoded(url_title: &str) -> Self {
-        let decoded = url_title.replace('_', " ");
-        Self::new(&decoded)
-    }
-
     /// Compares two titles for equality (using normalized forms)
     pub fn equals(&self, other: &WikiTitle) -> bool {
         self.normalized == other.normalized
@@ -182,37 +182,25 @@ impl fmt::Display for WikiTitle {
     }
 }
 
-impl From<&str> for WikiTitle {
-    fn from(title: &str) -> Self {
-        Self::new(title)
-    }
-}
-
-impl From<String> for WikiTitle {
-    fn from(title: String) -> Self {
-        Self::new(&title)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_basic_normalization() {
-        let title = WikiTitle::new("  hello_world  ");
+        let title = WikiTitle::new("  hello_world  ", String::from("en"));
         assert_eq!(title.normalized(), "Hello world");
     }
 
     #[test]
     fn test_url_format() {
-        let title = WikiTitle::new("Hello world");
+        let title = WikiTitle::new("Hello world", String::from("en"));
         assert_eq!(title.to_url_format(), "Hello_world");
     }
 
     #[test]
     fn test_disambiguation() {
-        let title = WikiTitle::new("Apple (fruit)");
+        let title = WikiTitle::new("Apple (fruit)", String::from("en"));
         assert!(title.is_disambiguation());
         assert_eq!(title.main_title(), "Apple");
         assert_eq!(title.disambiguation_part(), Some("fruit".to_string()));
@@ -220,7 +208,7 @@ mod tests {
 
     #[test]
     fn test_namespace() {
-        let title = WikiTitle::new("User:Example");
+        let title = WikiTitle::new("User:Example", String::from("en"));
         assert_eq!(title.namespace(), Some("User".to_string()));
         assert_eq!(title.without_namespace(), "Example");
         assert!(!title.is_main_namespace());
@@ -228,22 +216,16 @@ mod tests {
 
     #[test]
     fn test_main_namespace() {
-        let title = WikiTitle::new("Regular Article");
+        let title = WikiTitle::new("Regular Article", String::from("en"));
         assert!(title.is_main_namespace());
         assert_eq!(title.namespace(), None);
     }
 
     #[test]
     fn test_equality() {
-        let title1 = WikiTitle::new("Hello_World");
-        let title2 = WikiTitle::new("Hello World");
+        let title1 = WikiTitle::new("Hello_World", String::from("en"));
+        let title2 = WikiTitle::new("Hello World", String::from("en"));
         assert!(title1.equals(&title2));
         assert!(title1.equals_str("hello world"));
-    }
-
-    #[test]
-    fn test_from_url_encoded() {
-        let title = WikiTitle::from_url_encoded("Hello_World_Example");
-        assert_eq!(title.normalized(), "Hello World Example");
     }
 }

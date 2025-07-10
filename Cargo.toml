@@ -38,3 +38,4 @@ quick-xml = { version = "0.38", features = [
 ] }
 rusqlite = { version = "0.36.0", features = ["bundled"] }
 bzip2 = "0.6.0"
+rayon = "1.10.0"
