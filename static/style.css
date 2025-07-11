@@ -1,0 +1,115 @@
+:root {
+	--base-color: light-dark(oklch(1 0.002 247), oklch(0 0.02 247));
+	--surface-1: light-dark(
+		oklch(from var(--base-color) calc(l - 0.02) c h),
+		oklch(from var(--base-color) calc(l + 0.2) c h)
+	);
+	--surface-2: light-dark(
+		oklch(from var(--base-color) calc(l - 0.1) c h),
+		oklch(from var(--base-color) calc(l + 0.3) c h)
+	);
+	--border-color: light-dark(
+		oklch(from var(--base-color) calc(l - 0.15) c h),
+		oklch(from var(--base-color) calc(l + 0.4) c h)
+	);
+	--text-1: light-dark(
+		oklch(from var(--base-color) calc(l - 0.8) c h),
+		oklch(from var(--base-color) calc(l + 0.98) c h)
+	);
+	--text-2: light-dark(
+		oklch(from var(--base-color) calc(l - 0.6) c h),
+		oklch(from var(--base-color) calc(l + 0.8) c h)
+	);
+	--font-monospace: "JetBrains Mono", ui-monospace, SFMono-Regular, SF Mono,
+		Menlo, Consolas, Liberation Mono, monospace;
+}
+* {
+	box-sizing: border-box;
+}
+a {
+	text-decoration: none;
+}
+body {
+	font-family: Inter, sans-serif;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	max-height: 100vh;
+	display: grid;
+	grid-template-rows: 5vh 95vh;
+	color: var(--text-1);
+	background-color: var(--surface-1);
+	display: block;
+	overflow-x: hidden;
+	scrollbar-color: var(--surface-2) var(--surface-2);
+	scrollbar-width: thin;
+}
+main {
+	display: grid;
+	grid-template-columns: auto;
+	gap: 1rem;
+	padding: 1em;
+}
+
+header {
+	background-color: var(--surface-2);
+	text-align: center;
+	display: flex;
+	padding: 0 1em;
+	h1 {
+		font-size: 1.5em;
+	}
+}
+
+form {
+	display: flex;
+	gap: 0.5em;
+	max-height: 2lh;
+	font-family: var(--font-monospace);
+	font-size: 1em;
+	place-content: start;
+	place-items: center;
+	position: sticky;
+	top: 0;
+	background: var(--surface-1);
+	padding: 1em 0;
+	border-bottom: 1px solid var(--border-color);
+}
+input,
+button {
+	font-family: var(--font-monospace);
+	background: var(--surface-2);
+	border: 0;
+	font-size: 1.2em;
+	line-height: 1.25;
+}
+#language {
+	width: 7ch;
+}
+#title {
+	width: 40ch;
+}
+article {
+	display: grid;
+	gap: 0.5em;
+	grid-template-columns: 1fr;
+	grid-template-rows: auto;
+	pre {
+		display: block;
+		white-space: pre-wrap;
+		padding: 1em;
+		background: var(--surface-1);
+		font-family: var(--font-monospace);
+		overflow-x: auto;
+		tab-size: 2;
+		color: var(--text-1);
+		line-height: 1.6;
+		margin: 1em 0;
+	}
+}
+
+::highlight(suggestedlink) {
+	background-color: #0ca678;
+	color: #c3fae8;
+}

@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     stopwords::STOP_WORDS,
@@ -17,6 +18,19 @@ pub struct LinkSuggestion {
     pub title: WikiTitle,
     pub label: String,
     pub frequency: Option<usize>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkSuggestionRecord {
+    pub title: WikiTitle,
+    pub label: String,
+    pub frequency: usize,
+    pub confidence_score: f32,
+    pub byte_offset_start: usize,
+    pub byte_offset_end: usize,
+    pub link_text: String,
+    // Add character indices
+    pub char_offset_start: usize,
+    pub char_offset_end: usize,
 }
 
 impl LinkSuggestion {
@@ -40,13 +54,15 @@ impl LinkSuggestion {
 
     pub fn confidence_score(&self) -> f32 {
         let freq_threshold = 100;
+        if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
+            return 0.0;
+        }
+        // Extract the frequency value or default to 0
         if self.frequency <= Some(freq_threshold) {
             return 0.1;
         }
-
-        // Extract the frequency value or default to 0
         let freq = self.frequency.unwrap_or(0) as f32;
-        0.4 + (freq / freq_threshold as f32 * 0.1)
+        0.4 + (freq / freq_threshold as f32) * 0.1
     }
 
     pub fn process(&mut self, conn: Arc<Mutex<Connection>>) {
@@ -126,7 +142,7 @@ impl LinkSuggestion {
         let label = &self.label;
 
         // Find the label within the text segment
-        if let Some(label_start) = text.find(label) {
+        if let Some(label_start) = text.to_lowercase().find(label.to_lowercase().as_str()) {
             let label_end = label_start + label.len();
 
             // Calculate absolute byte positions
@@ -134,9 +150,53 @@ impl LinkSuggestion {
             let absolute_end = self.text_segment.range.start_byte + label_end;
 
             // Create the wiki link replacement text
-            let replacement = format!("[[{}|{}]]", self.title.normalized(), label);
+            let replacement: String = if self.title.normalized() == label {
+                format!("[[{label}]]")
+            } else {
+                format!("[[{}|{}]]", self.title.normalized(), label)
+            };
 
             Some((absolute_start, absolute_end, replacement))
+        } else {
+            Some((0, 0, String::new()))
+        }
+    }
+
+    /// Returns character indices along with byte indices
+    pub fn calculate_link_positions_with_char_indices(
+        &self,
+        full_text: &String,
+    ) -> Option<(usize, usize, usize, usize, String)> {
+        let text = &self.text_segment.text;
+        let label = &self.label;
+
+        // Find the label within the text segment
+        if let Some(label_start_bytes) = text.to_lowercase().find(label.to_lowercase().as_str()) {
+            let label_end_bytes = label_start_bytes + label.len();
+
+            // Calculate absolute byte positions
+            let absolute_start_bytes = self.text_segment.range.start_byte + label_start_bytes;
+            let absolute_end_bytes = self.text_segment.range.start_byte + label_end_bytes;
+            // Calculate the character offsets
+            let char_count_before_label = full_text[..absolute_start_bytes].chars().count();
+            let label_char_count = label.chars().count();
+            let char_start = char_count_before_label;
+            let char_end = char_start + label_char_count;
+
+            // Create the wiki link replacement text
+            let replacement: String = if self.title.normalized() == label {
+                format!("[[{label}]]")
+            } else {
+                format!("[[{}|{}]]", self.title.normalized(), label)
+            };
+
+            Some((
+                absolute_start_bytes,
+                absolute_end_bytes,
+                char_start,
+                char_end,
+                replacement,
+            ))
         } else {
             None
         }

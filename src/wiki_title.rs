@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::fmt;
 
 /// Represents a Wikipedia page title with utilities for normalization and manipulation
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WikiTitle {
     /// The raw title as it appears
     raw: String,
@@ -148,7 +149,7 @@ pub async fn fetch_wikipedia_wikitext(
     title: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let url = format!(
-        "https://{}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&format=json&titles={}&&formatversion=2",
+        "https://{}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&format=json&titles={}&&formatversion=2&redirects=1",
         language, title
     );
 
