@@ -144,8 +144,6 @@ pub async fn process_links_command(
     let connection = get_db_connection(language);
     let shared_conn = Arc::new(Mutex::new(connection));
     // Print filtered link suggestions
-    println!("Link suggestions:");
-    println!("candidates:{}", link_suggestions.len());
     let mut filtered_suggestions =
         filter_suggestions(link_suggestions, existing_links, &title.to_string());
     // Use parallel iterator to process suggestions in multiple threads
@@ -158,7 +156,6 @@ pub async fn process_links_command(
     let mut suggestions: Vec<LinkSuggestionRecord> = Vec::new();
     for suggestion in &filtered_suggestions {
         if suggestion.confidence_score() >= confidence_threshold {
-            println!("{suggestion}");
             let (byte_offset_start, byte_offset_end, char_start, char_end, replacement) =
                 suggestion
                     .calculate_link_positions_with_char_indices(&wikitext)
