@@ -2,7 +2,6 @@ use link_suggestion::{LinkSuggestion, LinkSuggestionRecord, filter_suggestions};
 use rayon::prelude::*;
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use similar::{ChangeTag, TextDiff};
 use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -198,14 +197,6 @@ pub async fn process_links_command(
             });
         }
     }
-    let text_diff = TextDiff::from_lines(wikitext.as_str(), new_wikitext.as_str());
-    print!(
-        "{}",
-        text_diff
-            .unified_diff()
-            .context_radius(2)
-            .header("old_file", "new_file")
-    );
     Ok(LinkSuggestionsResult {
         language: language.to_string(),
         title: title.to_string(),

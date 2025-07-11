@@ -33,6 +33,29 @@ pub struct LinkSuggestionRecord {
     pub char_offset_end: usize,
 }
 
+impl fmt::Display for LinkSuggestionRecord {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "LinkSuggestion: \"{}\" ({})",
+            self.link_text,
+            self.title.normalized()
+        )?;
+        writeln!(
+            f,
+            "  Char offsets: {}..{}",
+            self.char_offset_start, self.char_offset_end
+        )?;
+        writeln!(
+            f,
+            "  Byte offsets: {}..{}",
+            self.byte_offset_start, self.byte_offset_end
+        )?;
+        writeln!(f, "  Frequency: {}", self.frequency)?;
+        writeln!(f, "  Confidence score: {}", self.confidence_score)
+    }
+}
+
 impl LinkSuggestion {
     pub fn new(text_segment: TextSegment, title: WikiTitle) -> Self {
         let label = title.raw().to_string();

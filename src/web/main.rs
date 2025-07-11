@@ -1,5 +1,4 @@
 use std::io;
-use std::sync::Arc;
 
 mod router;
 
@@ -28,7 +27,7 @@ async fn main() -> io::Result<()> {
         .parse::<u16>()
         .unwrap_or(8000);
 
-    println!("Starting server at http://0.0.0.0:{}", port);
+    println!("Starting server at http://0.0.0.0:{port}");
 
     HttpServer::new(move || {
         App::new()
