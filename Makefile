@@ -12,6 +12,7 @@ wikipedia.list:
 	sed -i '/^sysop/d' $@
 	sed -i '/^wg_en/d' $@
 	sed -i '/^cebwiki/d' $@
+	sed -i '/^warwiki/d' $@
 	rm closed.dblist
 
 init:
