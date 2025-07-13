@@ -11,6 +11,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use std::{fmt, sync::MutexGuard};
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct LinkSuggestion {
@@ -234,6 +235,34 @@ impl PartialEq for LinkSuggestion {
 }
 
 impl Eq for LinkSuggestion {}
+
+impl PartialOrd for LinkSuggestion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for LinkSuggestion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // First compare by confidence score (descending order - higher scores first)
+        let confidence_cmp = other.confidence_score().partial_cmp(&self.confidence_score())
+            .unwrap_or(Ordering::Equal);
+        
+        if confidence_cmp != Ordering::Equal {
+            return confidence_cmp;
+        }
+        
+        // If confidence scores are equal, compare by frequency (descending order)
+        let freq_cmp = other.frequency.unwrap_or(0).cmp(&self.frequency.unwrap_or(0));
+        
+        if freq_cmp != Ordering::Equal {
+            return freq_cmp;
+        }
+        
+        // If frequencies are also equal, compare by title (ascending order for consistency)
+        self.title.normalized().cmp(other.title.normalized())
+    }
+}
 
 impl fmt::Display for LinkSuggestion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
