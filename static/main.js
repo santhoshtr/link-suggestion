@@ -134,7 +134,9 @@ document.addEventListener("DOMContentLoaded", async function () {
 	document
 		.getElementById("suggestionForm")
 		.addEventListener("submit", async function (event) {
-			suggestions = fetch_suggestions(event);
+			suggestions = await fetch_suggestions(event);
+			event.preventDefault();
+			return false;
 		});
 
 	// Register confidence score change handler
