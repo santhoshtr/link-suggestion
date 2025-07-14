@@ -1,22 +1,14 @@
-use bloom_wiki::process_links_command;
+use linksuggestions::process_links_command;
 // Import necessary crates for command-line argument parsing.
 use clap::{Parser, Subcommand};
-use link_suggestion::{LinkSuggestion, filter_suggestions};
-use rayon::prelude::*;
-use rusqlite::Connection;
 use similar::TextDiff;
 use std::io;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
-use wikitext::{TextSegment, WikiText};
 
 mod bloom_filter;
 mod link_suggestion;
 mod stopwords;
 mod wiki_title;
 mod wikitext;
-use bloom_filter::BloomFilterManager;
 
 // Define the command-line interface using clap.
 // This struct will parse the main arguments.

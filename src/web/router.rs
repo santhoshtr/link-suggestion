@@ -1,6 +1,6 @@
 use actix_web::{HttpResponse, Responder, get, web};
-use bloom_wiki::process_links_command;
 use handlebars::Handlebars;
+use linksuggestions::process_links_command;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
