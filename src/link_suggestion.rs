@@ -6,11 +6,9 @@ use crate::{
     wiki_title::WikiTitle,
     wikitext::{TextSegment, WikiLink},
 };
-use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
 use std::{
-    collections::HashSet,
-    sync::{Arc, Mutex},
+    collections::{HashMap, HashSet},
+    sync::{Arc, LazyLock, Mutex},
 };
 use std::{fmt, sync::MutexGuard};
 
@@ -20,6 +18,7 @@ pub struct LinkSuggestion {
     pub title: WikiTitle,
     pub label: String,
     pub frequency: Option<usize>,
+    pub frequency_max: usize,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkSuggestionRecord {
@@ -35,6 +34,10 @@ pub struct LinkSuggestionRecord {
     pub char_offset_start: usize,
     pub char_offset_end: usize,
 }
+
+// Global cache for freq_max values by language
+static FREQ_MAX_CACHE: LazyLock<Arc<Mutex<HashMap<String, usize>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 impl fmt::Display for LinkSuggestionRecord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -67,6 +70,7 @@ impl LinkSuggestion {
             title,
             label,
             frequency: Some(0),
+            frequency_max: 0,
         }
     }
     pub fn new_with_label(text_segment: TextSegment, title: WikiTitle, label: String) -> Self {
@@ -75,20 +79,56 @@ impl LinkSuggestion {
             title,
             label,
             frequency: Some(0),
+            frequency_max: 0,
         }
     }
 
+    fn get_freq_max(
+        &self,
+        connection: MutexGuard<'_, Connection>,
+        language: &str,
+    ) -> Result<usize, rusqlite::Error> {
+        // Check cache first
+        {
+            let cache = FREQ_MAX_CACHE.lock().unwrap();
+            if let Some(&cached_value) = cache.get(language) {
+                return Ok(cached_value);
+            }
+        }
+
+        // Query database if not cached
+        let query = "SELECT COUNT(link_label) AS freq FROM Links GROUP BY link_label ORDER BY freq DESC LIMIT 1";
+        let mut stmt = connection.prepare(query)?;
+        let mut rows = stmt.query([])?;
+
+        let freq_max = if let Some(first_row) = rows.next()? {
+            first_row.get(0)?
+        } else {
+            0
+        };
+
+        // Cache the result
+        {
+            let mut cache = FREQ_MAX_CACHE.lock().unwrap();
+            cache.insert(language.to_string(), freq_max);
+        }
+
+        Ok(freq_max)
+    }
+
     pub fn confidence_score(&self) -> f32 {
-        let freq_threshold = 10;
+        let freq_min = 2;
+        let freq_max = self.frequency_max;
+        let freq_score = ((self.frequency.unwrap() as f32).ln() - (freq_min as f32).ln())
+            / ((freq_max as f32).ln() - (freq_min as f32).ln());
         if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
             return 0.0;
         }
         // Extract the frequency value or default to 0
-        if self.frequency <= Some(freq_threshold) {
+        if self.frequency.unwrap() <= freq_min {
             return 0.1;
         }
-        let freq = self.frequency.unwrap_or(0) as f32;
-        0.4 + (freq / freq_threshold as f32) * 0.01
+        0.2 + freq_score
     }
 
     pub fn process(&mut self, conn: Arc<Mutex<Connection>>) {
@@ -105,6 +145,9 @@ impl LinkSuggestion {
         } else {
             self.frequency = self.get_link_frequency(conn.lock().unwrap()).unwrap();
         }
+        self.frequency_max = self
+            .get_freq_max(conn.lock().unwrap(), self.title.language())
+            .unwrap();
     }
 
     fn is_valid_title(&self, connection: MutexGuard<'_, Connection>) -> bool {
@@ -139,6 +182,7 @@ impl LinkSuggestion {
 
         resp
     }
+
     fn get_link_frequency(
         &self,
         connection: MutexGuard<'_, Connection>,
@@ -224,7 +268,7 @@ impl LinkSuggestion {
                 replacement,
             ))
         } else {
-            None
+            Some((0, 0, 0, 0, "".to_string()))
         }
     }
 }
