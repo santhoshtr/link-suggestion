@@ -17,7 +17,7 @@
     <body>
         {{> header }}
         <main>
-        <form id="suggestionForm" onsubmit="fetch_suggestions(event)">
+        <form id="suggestionForm" >
           <input value="{{language}}" type="text" id="language"/>.wikipedia.org/wiki/
           <input value="{{title}}" type="text" id="title" />
           <label for="confidence_score">confidence score</label>
@@ -30,12 +30,16 @@
             class="range"
             id="confidence_score"
           />
-          <button type="submit">Submit</button>
         </form>
         <article><pre id="wikitext">{{results.new_wikitext}}</pre></article>
        </main>
+    <section class="suggestion-preview" id="preview" >
+    </section>
         
-        
+        <script
+  src="https://santhoshtr.github.io/wiki-elements/src/wiki-article.js"
+  type="module">
+</script>
     </body>
 
 </html>

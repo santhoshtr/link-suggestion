@@ -112,4 +112,22 @@ article {
 ::highlight(suggestedlink) {
 	background-color: #0ca678;
 	color: #c3fae8;
+	/* not all css properties are supported under highlight */
+	cursor: pointer;
+}
+.suggestion-preview {
+	position: sticky;
+	display: none;
+	inset: unset;
+	bottom: 0;
+	left: 0;
+	right: 0;
+	background-color: var(--surface-2);
+	height: 8lh;
+	width: 100%;
+	border-top-right-radius: 0.5em;
+	border-top-left-radius: 0.5em;
+	font-family: var(--font-monospace);
+	border-top: 1px solid var(--border-color);
+	color: var(--text-2);
 }

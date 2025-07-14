@@ -102,9 +102,33 @@ function highlightLinks(suggestions) {
 }
 
 function find_suggestion_in_offset(suggestions, offset) {
-	// Find a suggestion in suggestions where the offset is inside the char_offset_start..char_offset_end range. AI!
+	// Find a suggestion in suggestions where the offset is inside the char_offset_start..char_offset_end range.
+	if (!suggestions || !suggestions.length) {
+		return null;
+	}
+	return suggestions.find((suggestion) => {
+		return (
+			offset >= suggestion.char_offset_start &&
+			offset <= suggestion.char_offset_end
+		);
+	});
 }
-
+function show_suggestion(suggestion) {
+	const container = document.getElementById("preview");
+	container.innerHTML = "";
+	const wiki_article_element = document.createElement("wiki-article");
+	wiki_article_element.language = suggestion.title.language;
+	wiki_article_element.article = suggestion.title.normalized;
+	wiki_article_element.layout = "compact";
+	container.append(wiki_article_element);
+	const confidence_score_el = document.createElement("div");
+	confidence_score_el.innerText = `Confidence score: ${suggestion.confidence_score}`;
+	container.append(confidence_score_el);
+	const frequency_el = document.createElement("div");
+	frequency_el.innerText = `Linked ${suggestion.frequency} times in ${suggestion.language} wikipedia`;
+	container.append(frequency_el);
+	container.style.display = "block";
+}
 document.addEventListener("DOMContentLoaded", async function () {
 	suggestions = await fetch_suggestions();
 	document
@@ -130,7 +154,17 @@ document.addEventListener("DOMContentLoaded", async function () {
 			const selection = window.getSelection();
 			if (selection.focusNode && this.contains(selection.focusNode)) {
 				const charOffset = selection.focusOffset;
-				console.log("Character offset:", charOffset);
+				const focussed_suggestion = find_suggestion_in_offset(
+					suggestions,
+					charOffset,
+				);
+				// Show suggestion
+				if (focussed_suggestion) {
+					show_suggestion(focussed_suggestion);
+				} else {
+					const container = document.getElementById("preview");
+					container.style.display = "none";
+				}
 			}
 		});
 });

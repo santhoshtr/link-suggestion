@@ -116,8 +116,6 @@ fn process_text_segments(
             process_label_candidates(&segment, link_candidates, label_filter, language);
         link_suggestions.extend(label_suggestions);
     }
-    link_suggestions.dedup();
-
     link_suggestions
 }
 
@@ -152,7 +150,7 @@ pub async fn process_links_command(
     });
     let mut new_wikitext = wikitext.clone();
     // Print only suggestions that meet the confidence threshold
-    let mut offset = 0;
+    let mut delta = 0;
     let mut suggestions: Vec<LinkSuggestionRecord> = Vec::new();
     for suggestion in &filtered_suggestions {
         if suggestion.confidence_score() >= confidence_threshold {
@@ -162,8 +160,8 @@ pub async fn process_links_command(
                     .unwrap();
 
             // Calculate new offsets taking into account previous replacements
-            let mut range_start = byte_offset_start + offset;
-            let mut range_end = byte_offset_end + offset;
+            let mut range_start = byte_offset_start + delta;
+            let mut range_end = byte_offset_end + delta;
 
             // Make sure range_start is at a char boundary
             while range_start < new_wikitext.len() && !new_wikitext.is_char_boundary(range_start) {
@@ -178,9 +176,10 @@ pub async fn process_links_command(
             // Make sure we're not out of bounds
             if range_start < new_wikitext.len() && range_end <= new_wikitext.len() {
                 new_wikitext.replace_range(range_start..range_end, replacement.as_str());
-                offset += replacement.len() - (range_end - range_start);
+                delta += replacement.len() - (range_end - range_start);
             }
             suggestions.push(LinkSuggestionRecord {
+                language: language.to_string(),
                 title: suggestion.title.to_owned(),
                 label: suggestion.label.to_owned(),
                 frequency: suggestion.frequency.unwrap_or_default(),

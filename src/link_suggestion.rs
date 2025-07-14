@@ -23,6 +23,7 @@ pub struct LinkSuggestion {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkSuggestionRecord {
+    pub language: String,
     pub title: WikiTitle,
     pub label: String,
     pub frequency: usize,
