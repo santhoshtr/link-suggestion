@@ -1,15 +1,16 @@
-function fetch_suggestions(event) {
+let suggestions;
+async function fetch_suggestions(event) {
 	event?.preventDefault();
 	const language = document.getElementById("language").value;
 	const title = document.getElementById("title").value;
 	const confidenceScore = document.getElementById("confidence_score").value;
 	// Construct URL in the required format
-	const url = `/${language}.wikipedia.org/wiki/${title}?confidence_score=${confidenceScore}`;
+	const url = `/${language}.wikipedia.org/wiki/${title}?confidence_score=0.4`;
 	// Navigate to the constructed URL
 	history.pushState(null, "", url);
 
 	// Fetch the data from the API
-	fetch(
+	return fetch(
 		`/api/suggest_links/${language}.wikipedia.org/wiki/${title}?confidence_score=${confidenceScore}`,
 	)
 		.then((response) => {
@@ -22,8 +23,10 @@ function fetch_suggestions(event) {
 			if (responseObj.success && responseObj.data) {
 				// Update the article section with the new wikitext
 				document.querySelector("article pre").textContent =
-					responseObj.data.new_wikitext || "";
-				highlightLinks(responseObj.data.suggestions);
+					responseObj.data.original_wikitext || "";
+				suggestions = responseObj.data.suggestions;
+				highlightLinks(suggestions);
+				return suggestions;
 			} else {
 				// Show error message
 				document.querySelector("article pre").textContent =
@@ -56,43 +59,37 @@ function highlightLinks(suggestions) {
 	// Create Highlight
 	const h = new Highlight();
 	const wikitextElement = document.getElementById("wikitext");
-
+	const confidence_score = document.getElementById("confidence_score").value;
 	if (!wikitextElement || !wikitextElement.firstChild) {
 		console.warn("Wikitext element or content not found");
 		return;
 	}
-
-	const textContent = wikitextElement.textContent;
 
 	// Process each suggestion
 	if (suggestions && Array.isArray(suggestions)) {
 		suggestions.forEach((suggestion) => {
 			try {
 				// Get the link text to highlight
-				const linkText = suggestion.link_text;
+				const linkText = suggestion.label;
 
-				if (!linkText) return;
-
-				// Find first occurrences of the linkText in the wikitext
-				let textIndex = 0;
-				let startIndex = textContent
-					.toLowerCase()
-					.indexOf(linkText.toLowerCase());
-
-				if (startIndex < 0) {
+				if (!linkText) {
 					return;
 				}
-				const endIndex = startIndex + linkText.length;
+				if (suggestion.confidence_score < confidence_score) {
+					return;
+				}
+				// Find first occurrences of the linkText in the wikitext
+				let textIndex = 0;
 				// Create a range for this occurrence
 				const range = new Range();
-				range.setStart(wikitextElement.firstChild, startIndex);
-				range.setEnd(wikitextElement.firstChild, endIndex);
+				range.setStart(
+					wikitextElement.firstChild,
+					suggestion.char_offset_start,
+				);
+				range.setEnd(wikitextElement.firstChild, suggestion.char_offset_end);
 
 				// Add the range to our highlight
 				h.add(range);
-
-				// Move past this occurrence for the next search
-				textIndex = endIndex;
 			} catch (error) {
 				console.error("Error highlighting suggestion:", error, suggestion);
 			}
@@ -103,6 +100,37 @@ function highlightLinks(suggestions) {
 	// This makes the ::highlight() CSS work
 	CSS.highlights.set("suggestedlink", h);
 }
-document.addEventListener("DOMContentLoaded", function () {
-	fetch_suggestions();
+
+function find_suggestion_in_offset(suggestions, offset) {
+	// Find a suggestion in suggestions where the offset is inside the char_offset_start..char_offset_end range. AI!
+}
+
+document.addEventListener("DOMContentLoaded", async function () {
+	suggestions = await fetch_suggestions();
+	document
+		.getElementById("suggestionForm")
+		.addEventListener("submit", async function (event) {
+			suggestions = fetch_suggestions(event);
+		});
+
+	// Register confidence score change handler
+	document
+		.getElementById("confidence_score")
+		.addEventListener("change", async function (event) {
+			if (suggestions) {
+				clearHighlights();
+				highlightLinks(suggestions);
+			}
+		});
+
+	// Click handler for links
+	document
+		.getElementById("wikitext")
+		.addEventListener("click", function (event) {
+			const selection = window.getSelection();
+			if (selection.focusNode && this.contains(selection.focusNode)) {
+				const charOffset = selection.focusOffset;
+				console.log("Character offset:", charOffset);
+			}
+		});
 });

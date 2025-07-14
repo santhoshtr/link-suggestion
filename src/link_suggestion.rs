@@ -6,12 +6,13 @@ use crate::{
     wiki_title::WikiTitle,
     wikitext::{TextSegment, WikiLink},
 };
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::{
     collections::HashSet,
     sync::{Arc, Mutex},
 };
 use std::{fmt, sync::MutexGuard};
-use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct LinkSuggestion {
@@ -77,7 +78,7 @@ impl LinkSuggestion {
     }
 
     pub fn confidence_score(&self) -> f32 {
-        let freq_threshold = 100;
+        let freq_threshold = 10;
         if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
             return 0.0;
         }
@@ -86,7 +87,7 @@ impl LinkSuggestion {
             return 0.1;
         }
         let freq = self.frequency.unwrap_or(0) as f32;
-        0.4 + (freq / freq_threshold as f32) * 0.1
+        0.4 + (freq / freq_threshold as f32) * 0.01
     }
 
     pub fn process(&mut self, conn: Arc<Mutex<Connection>>) {
@@ -235,34 +236,6 @@ impl PartialEq for LinkSuggestion {
 }
 
 impl Eq for LinkSuggestion {}
-
-impl PartialOrd for LinkSuggestion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for LinkSuggestion {
-    fn cmp(&self, other: &Self) -> Ordering {
-        // First compare by confidence score (descending order - higher scores first)
-        let confidence_cmp = other.confidence_score().partial_cmp(&self.confidence_score())
-            .unwrap_or(Ordering::Equal);
-        
-        if confidence_cmp != Ordering::Equal {
-            return confidence_cmp;
-        }
-        
-        // If confidence scores are equal, compare by frequency (descending order)
-        let freq_cmp = other.frequency.unwrap_or(0).cmp(&self.frequency.unwrap_or(0));
-        
-        if freq_cmp != Ordering::Equal {
-            return freq_cmp;
-        }
-        
-        // If frequencies are also equal, compare by title (ascending order for consistency)
-        self.title.normalized().cmp(other.title.normalized())
-    }
-}
 
 impl fmt::Display for LinkSuggestion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
