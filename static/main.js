@@ -4,8 +4,7 @@ async function fetch_suggestions(event) {
 	const language = document.getElementById("language").value;
 	const title = document.getElementById("title").value;
 	const confidenceScore = document.getElementById("confidence_score").value;
-	// Construct URL in the required format
-	const url = `/${language}.wikipedia.org/wiki/${title}?confidence_score=0.4`;
+	const url = `/${language}.wikipedia.org/wiki/${title}?confidence_score=0.2`;
 	// Navigate to the constructed URL
 	history.pushState(null, "", url);
 
