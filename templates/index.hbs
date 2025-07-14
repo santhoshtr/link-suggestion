@@ -19,7 +19,15 @@
         <main>
         <form id="suggestionForm" >
           <input value="{{language}}" type="text" id="language"/>.wikipedia.org/wiki/
-          <input value="{{title}}" type="text" id="title" />
+          <div id="autocomplete" class="autocomplete">
+            <input class="autocomplete-input"
+              placeholder="Search Wikipedia"
+              aria-label="Search Wikipedia"
+              value="{{title}}" 
+              id="title" 
+            >
+            <ul class="autocomplete-result-list"></ul>
+          </div>
           <label for="confidence_score">confidence score</label>
           <input
             type="number"
@@ -36,10 +44,56 @@
        </main>
     <section class="suggestion-preview" id="preview" >
     </section>
-        
+
         <script
   src="https://santhoshtr.github.io/wiki-elements/src/wiki-article.js"
   type="module">
+    </script>
+    <script src="https://unpkg.com/@trevoreyre/autocomplete-js"></script>
+    <script>
+
+const language = document.getElementById("language").value;
+const wikiUrl = `https://${language}.wikipedia.org`
+const params = 'action=query&list=search&format=json&origin=*'
+
+new Autocomplete('#autocomplete', {
+  search: input => {
+    const url = `${wikiUrl}/w/api.php?${
+      params
+    }&srsearch=${encodeURI(input)}`
+
+    return new Promise(resolve => {
+      if (input.length < 3) {
+        return resolve([])
+      }
+      fetch(url)
+        .then(response => response.json())
+        .then(data => {
+          const results = data.query.search.map((result, index) => {
+            return { ...result, index }
+          })
+          resolve(results)
+        })
+    })
+  },
+  
+  // Control the rendering of result items.
+  // Let's show the title and snippet
+  // from the Wikipedia results
+  renderResult: (result, props) => {
+    return `
+      <li ${props}>
+        <div class="wiki-title">
+          ${result.title}
+        </div>
+      </li>
+    `
+  },
+
+  // We want to display the title
+  getResultValue: result => result.title,
+
+})
 </script>
     </body>
 
