@@ -1,4 +1,30 @@
 let suggestions;
+let ml_suggestions;
+
+async function fetch_ml_suggestions(event) {
+	event?.preventDefault();
+	const language = document.getElementById("language").value;
+	const title = document.getElementById("title").value;
+	const url = `https://api.wikimedia.org/service/linkrecommendation/v1/linkrecommendations/wikipedia/${language}/${title}`;
+
+	// Fetch the data from the API
+	return fetch(url)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error("Network response was not ok");
+			}
+			return response.json();
+		})
+		.then((responseObj) => {
+			return responseObj.links;
+		})
+		.catch((error) => {
+			console.error("Error fetching data:", error);
+			document.querySelector("article pre").textContent =
+				"Error fetching data: " + error.message;
+		});
+}
+
 async function fetch_suggestions(event) {
 	event?.preventDefault();
 	const language = document.getElementById("language").value;
@@ -24,7 +50,6 @@ async function fetch_suggestions(event) {
 				document.querySelector("article pre").textContent =
 					responseObj.data.original_wikitext || "";
 				suggestions = responseObj.data.suggestions;
-				highlightLinks(suggestions);
 				return suggestions;
 			} else {
 				// Show error message
@@ -42,10 +67,11 @@ async function fetch_suggestions(event) {
 function clearHighlights() {
 	if (CSS.highlights) {
 		CSS.highlights.delete("suggestedlink");
+		CSS.highlights.delete("suggestedlinkml");
 	}
 }
 
-function highlightLinks(suggestions) {
+function highlightLinks(suggestions, ml_suggestions) {
 	// Clear any existing highlights first
 	clearHighlights();
 
@@ -57,6 +83,7 @@ function highlightLinks(suggestions) {
 
 	// Create Highlight
 	const h = new Highlight();
+	const h_ml = new Highlight();
 	const wikitextElement = document.getElementById("wikitext");
 	const confidence_score = document.getElementById("confidence_score").value;
 	if (!wikitextElement || !wikitextElement.firstChild) {
@@ -94,10 +121,36 @@ function highlightLinks(suggestions) {
 			}
 		});
 	}
+	if (ml_suggestions && Array.isArray(ml_suggestions)) {
+		ml_suggestions.forEach((suggestion) => {
+			try {
+				// Get the link text to highlight
+				const linkText = suggestion.link_text;
+				if (!linkText) {
+					return;
+				}
+				if (suggestion.score < confidence_score) {
+					return;
+				}
+				// Find first occurrences of the linkText in the wikitext
+				let textIndex = suggestion.wikitext_offset;
+				// Create a range for this occurrence
+				const range = new Range();
+				range.setStart(wikitextElement.firstChild, textIndex);
+				range.setEnd(wikitextElement.firstChild, textIndex + linkText.length);
+
+				// Add the range to our highlight
+				h_ml.add(range);
+			} catch (error) {
+				console.error("Error highlighting suggestion:", error, suggestion);
+			}
+		});
+	}
 
 	// Register the highlight into the registry
 	// This makes the ::highlight() CSS work
 	CSS.highlights.set("suggestedlink", h);
+	CSS.highlights.set("suggestedlinkml", h_ml);
 }
 
 function find_suggestion_in_offset(suggestions, offset) {
@@ -112,6 +165,7 @@ function find_suggestion_in_offset(suggestions, offset) {
 		);
 	});
 }
+
 function show_suggestion(suggestion) {
 	const container = document.getElementById("preview");
 	container.innerHTML = "";
@@ -128,13 +182,24 @@ function show_suggestion(suggestion) {
 	container.append(frequency_el);
 	container.style.display = "block";
 }
+
 document.addEventListener("DOMContentLoaded", async function () {
 	suggestions = await fetch_suggestions();
+	if (suggestions) {
+		clearHighlights();
+		highlightLinks(suggestions, ml_suggestions || []);
+	}
+	ml_suggestions = await fetch_ml_suggestions();
 	document
 		.getElementById("suggestionForm")
 		.addEventListener("submit", async function (event) {
 			suggestions = await fetch_suggestions(event);
+			ml_suggestions = await fetch_ml_suggestions();
 			event.preventDefault();
+			if (suggestions) {
+				clearHighlights();
+				highlightLinks(suggestions, ml_suggestions || []);
+			}
 			return false;
 		});
 
@@ -144,9 +209,30 @@ document.addEventListener("DOMContentLoaded", async function () {
 		.addEventListener("change", async function (event) {
 			if (suggestions) {
 				clearHighlights();
-				highlightLinks(suggestions);
+				highlightLinks(suggestions, ml_suggestions || []);
 			}
 		});
+	document
+		.getElementById("algorithm")
+		.addEventListener("change", async function (event) {
+			const algorithm = event.target.value;
+			if (algorithm == "all") {
+				highlightLinks(suggestions, ml_suggestions);
+			}
+			if (algorithm == "new") {
+				clearHighlights();
+				highlightLinks(suggestions, []);
+			}
+			if (algorithm == "ml") {
+				clearHighlights();
+				highlightLinks([], ml_suggestions);
+			}
+		});
+
+	if (suggestions) {
+		clearHighlights();
+		highlightLinks(suggestions, ml_suggestions || []);
+	}
 
 	// Click handler for links
 	document

@@ -112,8 +112,11 @@ article {
 ::highlight(suggestedlink) {
 	background-color: #0ca678;
 	color: #c3fae8;
-	/* not all css properties are supported under highlight */
-	cursor: pointer;
+}
+
+::highlight(suggestedlinkml) {
+	background-color: #4263eb;
+	color: #edf2ff;
 }
 .suggestion-preview {
 	position: sticky;
