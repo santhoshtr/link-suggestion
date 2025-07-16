@@ -28,7 +28,7 @@ The existing system for link suggestions is a machine learning based approach, d
 
 One of the features for the classifier system is the similarity score between the article under consideration and target article for the link. Semantic similarity of Wikipedia articles are hard problem. Vector embedding of the contents need to created first and then the similarity need to be calculated using techniques like cosine similarity. To calculated vector embedding, we need embedding models and their availability and performance is also a question.
 
-## Machine learning or not?
+### Machine learning approach
 
 I approached the problem by reading the research about link suggestions and trying to understand the problem modeling. A question I had is, why this problem is probabilistic, and where the need for machine learning comes into the solution.
 
@@ -123,3 +123,76 @@ All these suggestions are correct. But, this article can be linked to many other
 All this is to say that the similarity of source and target articles is not a feature to consider for this problem. If we remove that from the feature set, all other factors that contribute to the prediction are deterministic features that can be computed relatively easy. However, the statistical distribution of links in a wiki is definitely a contributing factor to prediction. For example, simple.wikipedia.org has practice of linking to words like 'year', 'human', 'heat', 'food', 'water' etc. But this may not be the patters in say, English Wikipedia. Identifying this patterns across all languages will require a statistical model of links.
 
 This learning prompted me to attempt a non-machine learning based approach. I also wanted it very simple and performant.
+
+## Algorithm
+
+### Data preparation
+
+To check whether an arbitrary text segment can point to an article, we need to know if that text segment can correspond to an article. This can be done in many ways:
+
+1. Use a web api like search api to find if a text can match to a title
+2. Directly query the mediawiki database table
+
+The first approach, if applied to all possible text segments in an article, will require several API hits and will be very slow. Second approach will also be slow. Additionally, it requires ability to connect to a mediawiki database or replica at runtime, which may not be the case.
+
+Instead of the above approaches, In our system, we build a bloom filter of all titles in a wiki. This is prepared as one time data preparation task. We query a production database to get all titles, and prepare a bloom filter out of it.
+
+[Bloom filters](https://en.wikipedia.org/wiki/Bloom_filter) are compact and extremely fast to tell if a given text segment is present in it or not. If it is not present the result is 100% accurate. If it is present, there is an error margin - false positivity rate, which we can control. In a stat machine, preparing the bloom filter for 342 wikis takes less than a minute when `make -j bloom` command is executed as it parallelize the jobs.
+
+```bash
+$ time make  bloom/simplewiki.bloom
+echo "select page_title from page where page_namespace=0 and page_is_redirect = 0" | analytics-mysql simplewiki > titles/simplewiki.titles.list
+./target/release/bloom-builder build -i titles/simplewiki.titles.list -o bloom/simplewiki.bloom
+Building Bloom filter with calculated capacity 271333 and false positive probability 0.001
+Added 271333 unique lines to the Bloom filter.
+Bloom filter built and saved to "bloom/simplewiki.bloom"
+
+real    0m1.302s
+user    0m0.289s
+sys     0m0.135s
+```
+
+Checking if a title exist or not:
+
+```bash
+cargo run --bin bloom-builder -- check  -f bloom/simplewiki.bloom -w Starch
+Checking for word: "Starch"
+The word "Starch" is PROBABLY in the filter (due to false positives, this is not 100% certain).
+```
+
+```bash
+cargo run --bin bloom-builder -- check  -f bloom/simplewiki.bloom -w SomeThingThatDoesNotExist
+Checking for word: "SomeThingThatDoesNotExist"
+cargo run --bin bloom-builder -- check  -f bloom/simplewiki.bloom -w Starch
+Checking for word: "SomeThingThatDoesNotExist"
+```
+
+You may also notice that this checks are extremely fast. With false positive rate set at 0.001, the size of bloom filter of all titles in Simple wikipedia is 487 kilobytes. Note that it has 271K articles.
+
+With this bloom filter we can check thousands of text segments in fraction of second. There is a 0.001 false positive rate, but we will eliminate them once we shortlist the candidates at later stage.
+
+How often we should update this filter? Suppose a new article is created in simple.wikipedia.org after this filter was created. The filter will tell that article is not present in the filter. And our suggestion system will ignore text segments matching that new title. It is completely acceptable to not suggest a candidate. Additionally, we set a constraint that all the suggestions that we are making are based on link frequency - how many time an article is linked. In the case of new articles, it will take time for editors to start linking to it and meet our frequency thresholds. By that time, we would have updated our filters. Updating this filter once in a month is fair enough.
+
+### Text segments
+
+For a given text, each word in it can be a candidate for link. Phrases consisting of two or more words can also be candidates for linking. For example "United states of America" is a link candidate with 4 words in it. We will extract all combinations of one word, two word, three words, four words.
+
+However, how to find the text runs in a given wikitext content for an article? The wikitext markup for an article will have templates, links,references and such elements. We should be suggesting links only to plain text part of the article. This require parsing the article and identifying ranges of plain texts. We use [tree-sitter-wikitext](https://github.com/santhoshtr/tree-sitter-wikitext/) parser for this purpose. This parser is very fast, error tolerant parser for wikitext and available in C, Go, Rust, JS, Wasm, python environments.We use the rust bindings of tree-sitter-wikitext.
+
+Not all text segment are appropriate for linking. Some communities has their own conventions about linking. For example, years, numbers, stop words, month names, continent names etc are not usually linked in English wikipedia. Hard-coding such rules is one option, but wont scale for all language communities. In our approach, we wont hard code these rules, but we will learn from the frequency distribution of links and get the same conventions in practice.
+
+### Frequency distribution of links
+
+Some articles will be linked a lot in wiki. Some will be linked very rarely. Knowing this pattern accurately will help us to rank and prioritise the suggestions.
+
+To understand this pattern, let us look at simple.wikipedia.org. The title that is most linked in that wiki is [Departments_of_France](https://simple.wikipedia.org/wiki/Departments_of_France) - 23789 times. Communes_of_France, France, United_States(13192), Regions_of_France, Cantons_of_Switzerland, Germany(4491), Italy(4194) etc comes after that. Europe is linked 900 times, Finland linked 486 times,Mathematician - 100 times and Indo-Iranic_languages is linked 3 times and so on. The distribution is non uniform. Our link suggestions should also adhere to this distribution so that it can match the community conventions about linking.
+
+To learn this distribution, we need to collect all links, and their frequency of occurrences. We also need to consider the link label will be different from link title in many cases. We need that information as well.
+
+Preparing this data requires finding all links in all articles in a wiki. Finding all links in an article is also required at inference time(runtime) to avoid linking already linked titles. Here also we will use the tree-sitter-wikitext. Parsing the wikitext dump of a wiki is not an easy task, but tree-sitter-wikitext can handle huge dumps without issues. Parsing ~80 GB wikitext dump of English wikipedia takes about 5 hours. But other wikis can be parsed in minutes. A bottleneck here is the bzip2 compressed dumps as they cannot be decompressed in multi-threaded way. So, we will be confined to a single thread. Our architecture allows to parallelize multiple wiki dump parsing in parallel though. We wont decompress and parse, we will stream the bzip2 file to our link extractor directly.
+
+The output of this parsing is a database in sqlite format per wiki. The above distribution statistics I shared is based on simplewiki.sqlite file(~173MB). For English Wikipedia, this database is about 3.8 GB sqlite file.
+
+### Normalization
+
+## Prediction
