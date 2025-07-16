@@ -10,6 +10,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 use std::{fmt, sync::MutexGuard};
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct LinkSuggestion {
@@ -249,6 +250,18 @@ impl PartialEq for LinkSuggestion {
 }
 
 impl Eq for LinkSuggestion {}
+
+impl PartialOrd for LinkSuggestion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for LinkSuggestion {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.text_segment.range.start_byte.cmp(&other.text_segment.range.start_byte)
+    }
+}
 
 impl fmt::Display for LinkSuggestion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
