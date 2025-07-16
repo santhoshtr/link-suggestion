@@ -10,7 +10,6 @@ use wikitext::{TextSegment, WikiText};
 
 mod bloom_filter;
 mod link_suggestion;
-mod stopwords;
 mod wiki_title;
 mod wikitext;
 use bloom_filter::BloomFilterManager;
@@ -115,6 +114,8 @@ fn process_text_segments(
             process_label_candidates(&segment, link_candidates, label_filter, language);
         link_suggestions.extend(label_suggestions);
     }
+    link_suggestions.sort();
+    link_suggestions.dedup();
     link_suggestions
 }
 

@@ -4,7 +4,6 @@ use std::io;
 
 mod bloom_filter;
 mod link_suggestion;
-mod stopwords;
 mod wiki_title;
 mod wikitext;
 

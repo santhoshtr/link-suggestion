@@ -31,9 +31,9 @@
           <label for="confidence_score">confidence score</label>
           <input
             type="number"
-            min="0.2"
+            min="0.1"
             max="1.0"
-            step="0.1"
+            step="0.05"
             value="{{confidence_score}}"
             class="range"
             id="confidence_score"
@@ -41,7 +41,7 @@
           <select id="algorithm">
           <option value="all" >Select algorithm</option>
           <option value="ml">Machine learning</option>
-          <option value="new" selected>Statistical</option>
+          <option value="new" >Statistical</option>
           </select>
           <button type="submit">Submit</button>
         </form>
