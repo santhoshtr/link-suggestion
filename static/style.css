@@ -110,12 +110,12 @@ article {
 }
 
 ::highlight(suggestedlink) {
-	background-color: #0ca678;
+	background-color: oklch(0.6432 0.1338 164.7 / 80%);
 	color: #c3fae8;
 }
 
 ::highlight(suggestedlinkml) {
-	background-color: #4263eb;
+	background-color: oklch(0.5566 0.2082 268.35 / 80%);
 	color: #edf2ff;
 }
 .suggestion-preview {
