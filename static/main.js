@@ -165,17 +165,23 @@ function find_suggestion_in_offset(suggestions, offset) {
 function show_suggestion(suggestion) {
 	const container = document.getElementById("preview");
 	container.innerHTML = "";
+	const language = document.getElementById("language").value;
 	const wiki_article_element = document.createElement("wiki-article");
-	wiki_article_element.language = suggestion.title.language;
-	wiki_article_element.article = suggestion.title.normalized;
+	wiki_article_element.language = language;
+	wiki_article_element.article =
+		suggestion.title?.normalized || suggestion.link_target;
 	wiki_article_element.layout = "compact";
 	container.append(wiki_article_element);
 	const confidence_score_el = document.createElement("div");
 	confidence_score_el.innerText = `Confidence score: ${suggestion.score}`;
 	container.append(confidence_score_el);
-	const frequency_el = document.createElement("div");
-	frequency_el.innerText = `Linked ${suggestion.frequency} times in ${suggestion.language} wikipedia`;
-	container.append(frequency_el);
+
+	if (suggestion.frequency) {
+		const frequency_el = document.createElement("div");
+		frequency_el.innerText = `Linked ${suggestion.frequency} times in ${language} wikipedia`;
+		container.append(frequency_el);
+	}
+
 	container.style.display = "block";
 }
 
@@ -238,7 +244,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 			if (selection.focusNode && this.contains(selection.focusNode)) {
 				const charOffset = selection.focusOffset;
 				const focussed_suggestion = find_suggestion_in_offset(
-					suggestions,
+					suggestions.concat(ml_suggestions),
 					charOffset,
 				);
 				// Show suggestion
