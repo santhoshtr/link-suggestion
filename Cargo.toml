@@ -28,8 +28,7 @@ name = "linksuggestion-web"
 path = "src/web/main.rs"
 
 [dependencies]
-serde_json = { version = "1.0", features = ["arbitrary_precision"] }
-tree-sitter-wikitext = { git = "https://github.com/santhoshtr/tree-sitter-wikitext", rev = "8f4e50b7" }
+tree-sitter-wikitext = { git = "https://github.com/santhoshtr/tree-sitter-wikitext", rev = "1da913a" }
 bloomfilter = "3.0.1"
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4.0", features = ["derive"] }
@@ -54,3 +53,4 @@ actix-web = "4.10.2"
 actix-files = "0.6.6"
 env_logger = "0.11.7"
 handlebars = "6.3.2"
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }
