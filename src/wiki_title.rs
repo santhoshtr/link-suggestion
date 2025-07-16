@@ -149,8 +149,7 @@ pub async fn fetch_wikipedia_wikitext(
     title: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let url = format!(
-        "https://{}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&format=json&titles={}&&formatversion=2&redirects=1",
-        language, title
+        "https://{language}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&format=json&titles={title}&&formatversion=2&redirects=1"
     );
 
     let client = reqwest::Client::new();

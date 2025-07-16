@@ -16,10 +16,6 @@ pub fn calculate_link_edit_positions(
     if let Some(label_start) = text.find(label.as_str()) {
         let label_end = label_start + label.len();
 
-        // Calculate absolute byte positions
-        let absolute_start = label_start;
-        let absolute_end = label_end;
-
         // Create the wiki link replacement text
         let replacement = format!("[[{label}|{label}]]");
         let label_new_end = label_start + replacement.len();

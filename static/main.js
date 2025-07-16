@@ -48,7 +48,7 @@ async function fetch_suggestions(event) {
 			if (responseObj.success && responseObj.data) {
 				// Update the article section with the new wikitext
 				document.querySelector("article pre").textContent =
-					responseObj.data.original_wikitext || "";
+					responseObj.data.wikitext || "";
 				suggestions = responseObj.data.suggestions;
 				return suggestions;
 			} else {
@@ -96,23 +96,20 @@ function highlightLinks(suggestions, ml_suggestions) {
 		suggestions.forEach((suggestion) => {
 			try {
 				// Get the link text to highlight
-				const linkText = suggestion.label;
+				const linkText = suggestion.link_text;
 
 				if (!linkText) {
 					return;
 				}
-				if (suggestion.confidence_score < confidence_score) {
+				if (suggestion.score < confidence_score) {
 					return;
 				}
 				// Find first occurrences of the linkText in the wikitext
-				let textIndex = 0;
+				let textIndex = suggestion.wikitext_offset;
 				// Create a range for this occurrence
 				const range = new Range();
-				range.setStart(
-					wikitextElement.firstChild,
-					suggestion.char_offset_start,
-				);
-				range.setEnd(wikitextElement.firstChild, suggestion.char_offset_end);
+				range.setStart(wikitextElement.firstChild, textIndex);
+				range.setEnd(wikitextElement.firstChild, textIndex + linkText.length);
 
 				// Add the range to our highlight
 				h.add(range);
@@ -159,10 +156,9 @@ function find_suggestion_in_offset(suggestions, offset) {
 		return null;
 	}
 	return suggestions.find((suggestion) => {
-		return (
-			offset >= suggestion.char_offset_start &&
-			offset <= suggestion.char_offset_end
-		);
+		let textIndex = suggestion.wikitext_offset;
+		let textEnd = textIndex + suggestion.link_text.length;
+		return offset >= textIndex && offset <= textEnd;
 	});
 }
 
@@ -175,7 +171,7 @@ function show_suggestion(suggestion) {
 	wiki_article_element.layout = "compact";
 	container.append(wiki_article_element);
 	const confidence_score_el = document.createElement("div");
-	confidence_score_el.innerText = `Confidence score: ${suggestion.confidence_score}`;
+	confidence_score_el.innerText = `Confidence score: ${suggestion.score}`;
 	container.append(confidence_score_el);
 	const frequency_el = document.createElement("div");
 	frequency_el.innerText = `Linked ${suggestion.frequency} times in ${suggestion.language} wikipedia`;

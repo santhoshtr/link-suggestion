@@ -24,15 +24,11 @@ pub struct LinkSuggestion {
 pub struct LinkSuggestionRecord {
     pub language: String,
     pub title: WikiTitle,
-    pub label: String,
-    pub frequency: usize,
-    pub confidence_score: f32,
-    pub byte_offset_start: usize,
-    pub byte_offset_end: usize,
     pub link_text: String,
+    pub frequency: usize,
+    pub score: f32,
     // Add character indices
-    pub char_offset_start: usize,
-    pub char_offset_end: usize,
+    pub wikitext_offset: usize,
 }
 
 // Global cache for freq_max values by language
@@ -47,18 +43,9 @@ impl fmt::Display for LinkSuggestionRecord {
             self.link_text,
             self.title.normalized()
         )?;
-        writeln!(
-            f,
-            "  Char offsets: {}..{}",
-            self.char_offset_start, self.char_offset_end
-        )?;
-        writeln!(
-            f,
-            "  Byte offsets: {}..{}",
-            self.byte_offset_start, self.byte_offset_end
-        )?;
+        writeln!(f, "  Char offsets: {}", self.wikitext_offset)?;
         writeln!(f, "  Frequency: {}", self.frequency)?;
-        writeln!(f, "  Confidence score: {}", self.confidence_score)
+        writeln!(f, "  Confidence score: {}", self.score)
     }
 }
 
@@ -233,42 +220,21 @@ impl LinkSuggestion {
     }
 
     /// Returns character indices along with byte indices
-    pub fn calculate_link_positions_with_char_indices(
-        &self,
-        full_text: &String,
-    ) -> Option<(usize, usize, usize, usize, String)> {
+    pub fn calculate_link_positions_with_char_indices(&self, full_text: &String) -> Option<usize> {
         let text = &self.text_segment.text;
         let label = &self.label;
 
         // Find the label within the text segment
         if let Some(label_start_bytes) = text.to_lowercase().find(label.to_lowercase().as_str()) {
-            let label_end_bytes = label_start_bytes + label.len();
-
             // Calculate absolute byte positions
             let absolute_start_bytes = self.text_segment.range.start_byte + label_start_bytes;
-            let absolute_end_bytes = self.text_segment.range.start_byte + label_end_bytes;
             // Calculate the character offsets
             let char_count_before_label = full_text[..absolute_start_bytes].chars().count();
-            let label_char_count = label.chars().count();
             let char_start = char_count_before_label;
-            let char_end = char_start + label_char_count;
 
-            // Create the wiki link replacement text
-            let replacement: String = if self.title.normalized() == label {
-                format!("[[{label}]]")
-            } else {
-                format!("[[{}|{}]]", self.title.normalized(), label)
-            };
-
-            Some((
-                absolute_start_bytes,
-                absolute_end_bytes,
-                char_start,
-                char_end,
-                replacement,
-            ))
+            Some(char_start)
         } else {
-            Some((0, 0, 0, 0, "".to_string()))
+            Some(0)
         }
     }
 }

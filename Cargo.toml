@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "link-suggestion"
+name = "linksuggestion-cli"
 path = "src/main.rs"
 
 [[bin]]
@@ -50,7 +50,6 @@ quick-xml = { version = "0.38", features = [
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 bzip2 = "0.6.0"
 rayon = "1.10.0"
-similar = "2.7.0"
 actix-web = "4.10.2"
 actix-files = "0.6.6"
 env_logger = "0.11.7"

@@ -20,8 +20,7 @@ pub struct LinkSuggestionsResult {
     pub language: String,
     pub title: String,
     pub confidence_score: f32,
-    pub original_wikitext: String,
-    pub new_wikitext: String,
+    pub wikitext: String,
     pub suggestions: Vec<LinkSuggestionRecord>,
 }
 
@@ -148,48 +147,22 @@ pub async fn process_links_command(
     filtered_suggestions.par_iter_mut().for_each(|suggestion| {
         suggestion.process(shared_conn.clone());
     });
-    let mut new_wikitext = wikitext.clone();
     // Print only suggestions that meet the confidence threshold
-    let mut delta = 0;
     let mut suggestions: Vec<LinkSuggestionRecord> = Vec::new();
     for suggestion in &filtered_suggestions {
         if suggestion.confidence_score() >= confidence_threshold {
-            let (byte_offset_start, byte_offset_end, char_start, char_end, replacement) =
-                suggestion
-                    .calculate_link_positions_with_char_indices(&wikitext)
-                    .unwrap();
+            let char_start = suggestion
+                .calculate_link_positions_with_char_indices(&wikitext)
+                .unwrap();
 
             // Calculate new offsets taking into account previous replacements
-            let mut range_start = byte_offset_start + delta;
-            let mut range_end = byte_offset_end + delta;
-
-            // Make sure range_start is at a char boundary
-            while range_start < new_wikitext.len() && !new_wikitext.is_char_boundary(range_start) {
-                range_start += 1;
-            }
-
-            // Make sure range_end is at a char boundary
-            while range_end < new_wikitext.len() && !new_wikitext.is_char_boundary(range_end) {
-                range_end += 1;
-            }
-
-            // Make sure we're not out of bounds
-            if range_start < new_wikitext.len() && range_end <= new_wikitext.len() {
-                new_wikitext.replace_range(range_start..range_end, replacement.as_str());
-                delta += replacement.len() - (range_end - range_start);
-            }
             suggestions.push(LinkSuggestionRecord {
                 language: language.to_string(),
                 title: suggestion.title.to_owned(),
-                label: suggestion.label.to_owned(),
+                link_text: suggestion.label.to_owned(),
                 frequency: suggestion.frequency.unwrap_or_default(),
-                confidence_score: suggestion.confidence_score(),
-                byte_offset_start,
-                byte_offset_end,
-                char_offset_start: char_start,
-                char_offset_end: char_end,
-
-                link_text: replacement,
+                score: suggestion.confidence_score(),
+                wikitext_offset: char_start,
             });
         }
     }
@@ -197,13 +170,12 @@ pub async fn process_links_command(
         language: language.to_string(),
         title: title.to_string(),
         confidence_score: confidence_threshold,
-        original_wikitext: wikitext,
-        new_wikitext,
+        wikitext,
         suggestions,
     })
 }
 
 fn get_db_connection(language: &str) -> Connection {
-    let db_path = format!("anchor-dictionaries/{}wiki.sqlite", language);
+    let db_path = format!("anchor-dictionaries/{language}wiki.sqlite");
     Connection::open(&db_path).unwrap_or_else(|_| panic!("Error opening database {db_path}"))
 }

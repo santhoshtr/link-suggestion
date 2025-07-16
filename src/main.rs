@@ -1,7 +1,5 @@
+use clap::Parser;
 use linksuggestions::process_links_command;
-// Import necessary crates for command-line argument parsing.
-use clap::{Parser, Subcommand};
-use similar::TextDiff;
 use std::io;
 
 mod bloom_filter;
@@ -16,24 +14,15 @@ mod wikitext;
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-}
-
-// Define the subcommands.
-#[derive(Subcommand, Debug)]
-enum Commands {
-    Links {
-        /// Wikipedia language code (e.g., "en", "fr", "de").
-        #[arg(short, long)]
-        language: String,
-        /// Wikipedia article title.
-        #[arg(short, long)]
-        title: String,
-        // confidence threshold. Value between 0.0 and 0.1
-        #[arg(short, long)]
-        confidence: f32,
-    },
+    /// Wikipedia language code (e.g., "en", "fr", "de").
+    #[arg(short, long)]
+    language: String,
+    /// Wikipedia article title.
+    #[arg(short, long)]
+    title: String,
+    // confidence threshold. Value between 0.0 and 0.1
+    #[arg(short, long)]
+    confidence: f32,
 }
 
 // The main function where the program execution begins.
@@ -43,28 +32,9 @@ async fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
     // Match the subcommand to determine which operation to perform.
-    match &cli.command {
-        Commands::Links {
-            language,
-            title,
-            confidence,
-        } => {
-            let result = process_links_command(language, title, *confidence).await?;
-            for suggestion in result.suggestions {
-                println!("{suggestion}");
-            }
-            let text_diff = TextDiff::from_lines(
-                result.original_wikitext.as_str(),
-                result.new_wikitext.as_str(),
-            );
-            print!(
-                "{}",
-                text_diff
-                    .unified_diff()
-                    .context_radius(2)
-                    .header("old_file", "new_file")
-            );
-        }
+    let result = process_links_command(&cli.language, &cli.title, cli.confidence).await?;
+    for suggestion in result.suggestions {
+        println!("{suggestion}");
     }
 
     Ok(())
