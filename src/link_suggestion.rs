@@ -2,7 +2,6 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    stopwords::STOP_WORDS,
     wiki_title::WikiTitle,
     wikitext::{TextSegment, WikiLink},
 };
@@ -106,16 +105,19 @@ impl LinkSuggestion {
     pub fn confidence_score(&self) -> f32 {
         let freq_min = 2;
         let freq_max = self.frequency_max;
-        let freq_score = ((self.frequency.unwrap() as f32).ln() - (freq_min as f32).ln())
-            / ((freq_max as f32).ln() - (freq_min as f32).ln());
-        if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
-            return 0.0;
-        }
+
         // Extract the frequency value or default to 0
         if self.frequency.unwrap() <= freq_min {
-            return 0.1;
+            return 0.0;
         }
-        0.2 + freq_score
+
+        if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
+            // Edge cases: A title for the lable could not be found.
+            return 0.0;
+        }
+
+        ((self.frequency.unwrap() as f32).ln() - (freq_min as f32).ln())
+            / ((freq_max as f32).ln() - (freq_min as f32).ln())
     }
 
     pub fn process(&mut self, conn: Arc<Mutex<Connection>>) {
@@ -289,35 +291,17 @@ impl fmt::Display for LinkSuggestion {
 pub fn filter_suggestions(
     candidates: Vec<LinkSuggestion>,
     existing_links: Vec<WikiLink>,
-    current_article_tite: &String,
+    current_article_title: &String,
 ) -> Vec<LinkSuggestion> {
     let mut seen_titles = HashSet::new();
     candidates
         .into_iter()
         .filter(|candidate| {
             let normalized = candidate.title.normalized();
-            let label = candidate.label.as_str();
             // Deduplicate based on normalized title
             if !seen_titles.insert(normalized.to_string()) {
                 return false;
             }
-
-            // Remove titles that are numbers
-            if normalized.chars().all(|c| c.is_ascii_digit()) {
-                return false;
-            }
-            if label.chars().all(|c| c.is_ascii_digit()) {
-                return false;
-            }
-
-            // Remove if title is single letter
-            if normalized.len() == 1 {
-                return false;
-            }
-            if label.len() == 1 {
-                return false;
-            }
-
             // Remove candidates that are already present in existing WikiLinks
             if existing_links
                 .iter()
@@ -325,20 +309,10 @@ pub fn filter_suggestions(
             {
                 return false;
             }
-            if candidate.title.normalized() == current_article_tite {
+            if candidate.title.normalized() == current_article_title {
                 return false;
             }
-            if candidate.title.raw() == current_article_tite {
-                return false;
-            }
-
-            // Remove titles that are stopwords
-            let stopwords = STOP_WORDS;
-            let lower_title = normalized.to_lowercase();
-            if stopwords.contains(&lower_title.as_str()) {
-                return false;
-            }
-            if stopwords.contains(&candidate.label.as_str()) {
+            if candidate.title.raw() == current_article_title {
                 return false;
             }
 
