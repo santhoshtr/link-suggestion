@@ -173,6 +173,8 @@ With this bloom filter we can check thousands of text segments in fraction of se
 
 How often we should update this filter? Suppose a new article is created in simple.wikipedia.org after this filter was created. The filter will tell that article is not present in the filter. And our suggestion system will ignore text segments matching that new title. It is completely acceptable to not suggest a candidate. Additionally, we set a constraint that all the suggestions that we are making are based on link frequency - how many time an article is linked. In the case of new articles, it will take time for editors to start linking to it and meet our frequency thresholds. By that time, we would have updated our filters. Updating this filter once in a month is fair enough.
 
+We need another bloom filter for link labels as well to capture the case of link title differing from link label. The link labels are collected by parsing the full wikidump as explained below.
+
 ### Text segments
 
 For a given text, each word in it can be a candidate for link. Phrases consisting of two or more words can also be candidates for linking. For example "United states of America" is a link candidate with 4 words in it. We will extract all combinations of one word, two word, three words, four words.
@@ -193,6 +195,37 @@ Preparing this data requires finding all links in all articles in a wiki. Findin
 
 The output of this parsing is a database in sqlite format per wiki. The above distribution statistics I shared is based on simplewiki.sqlite file(~173MB). For English Wikipedia, this database is about 3.8 GB sqlite file.
 
-### Normalization
+### Confidence score
+
+Once we get possible list of candidates from the bloom filter step, we need to rank them. In this stage, we will calculate the position of candidate in the link distribution in the wiki. If the candidate is not linked frequently, we will drop them. To place our candidate in the link distribution, we will use the following approach.
+
+Since the frequency of linking is not uniform, we will use the following formula to get the position of candidate between 0 and 1. 1 corresponds to the maximum link frequency for that wiki. In the case of simple.wikipedia.org we found it as 23789. We call it $F_{max}$. We will use 1 as minimum link frequency and will denote $F_{min}$.
+The frequency of linking for the candidate is looked up in the sqlite database and we will denote it as $F_c$.
+
+Then the position of candidate in this distribution as a value between 0 and 1 is:
+
+$$
+(log(F_{c}) - log(F_{min})) / (log(F_{max}) - log(F_{min}))
+$$
+
+And we call it `Confidence score`
+
+The article `Radiation` is linked 42 times in simple.wikipedia.org. What is the confidence score for suggesting a text segment `radiation` to that title?
+
+$$
+log(42) - log(1)/ log(23789) - log(1)
+$$
+
+When $log_{10}$ is used, we get the result as $0.37$
+
+We can also try to visualize this title's position in the link distribution of the entire wiki. See below graph. In the $x$ axis, we have rank of articles - the index of articles when they are sorted by frequency of occurrences in descending order. We plot it in logarithmic scale since we have 270k+ articles in simple wikipedia. In $y$ axis, we plot the link frequency again in logarithmic scale.
+
+![](./assets/link-distribution-simplewiki-radiation.png)
+
+The graph shows that there are large number of links with very low frequency, but a few with very high frequency. The title radiation with frequency 42($log_{10}42 = 1.62$) is also marked in the graph. In the relative scale(0 to 1 scale), we can see it appears above $1/3^{rd}$ in $y$ axis.
+
+The higher the article in this graph, the better confidence we have to suggest them for linking.
 
 ## Prediction
+
+We use the `Confidence score` calculated above to rank the suggestions. For every suggestion, we can provide the link label, link title, the position of link label in the full wikitext for the article too.
