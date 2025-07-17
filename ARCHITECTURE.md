@@ -226,6 +226,12 @@ The graph shows that a large number of links have a very low frequency, while a 
 
 The higher an article is on this graph, the more confidence we have in suggesting it for linking.
 
+I had mentioned about the false positive chances with bloom filters. When we do lookup for the frequency of linking, for such false positives, there won't be any record in the database. This is how we handle false positives.
+
+## Disambiguation
+
+The Confidence score is based on the global popularity of a link across the entire wiki. This can be a drawback in specific contexts. For example, in a computer science article, the term "Apple" is more likely to refer to the company than the fruit, but the system might suggest a link to "Apple (fruit)" if it is a more frequently linked-to article overall. I focus on preventing this happen instead of disambiguating. For the label "Apple", if we see that it is linked to multiple titles by the community, it indicates an ambiguity. My algorithm just discard such labels as of now. The ambiguity scenarios are more frequent in bigger wikis like English wikipedia, but not in the case of smaller wikipedias(Ancecdotal, more study required here).
+
 ## Prediction
 
 We use the `Confidence Score` calculated above to rank the suggestions. For every suggestion, we can also provide the link label, the link title, and the position of the link label in the article's full wikitext.
