@@ -5,6 +5,7 @@ mod router;
 use actix_files as fs;
 use actix_web::{App, HttpServer, middleware::Logger, web};
 
+use router::get_distribution;
 use router::index;
 use router::robots_txt;
 use router::suggest_links_api;
@@ -47,6 +48,7 @@ async fn main() -> io::Result<()> {
             .service(index)
             .service(suggestions_view)
             .service(suggest_links_api)
+            .service(get_distribution)
             .service(robots_txt)
     })
     .bind(("0.0.0.0", port))?

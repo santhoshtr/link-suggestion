@@ -1,6 +1,6 @@
 use actix_web::{HttpResponse, Responder, get, web};
 use handlebars::Handlebars;
-use linksuggestions::process_links_command;
+use linksuggestions::{generate_chart_data, process_links_command};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -100,4 +100,21 @@ User-agent: *
 Disallow: /"#;
 
     HttpResponse::Ok().content_type("text/plain").body(content)
+}
+
+#[get("/api/linkdistribution/{language}")]
+async fn get_distribution(path: web::Path<String>) -> HttpResponse {
+    let language: String = path.into_inner();
+    match generate_chart_data(language.as_str()) {
+        Ok(results) => HttpResponse::Ok().json(ApiResponse {
+            success: true,
+            data: Some(results),
+            error: None,
+        }),
+        Err(err) => HttpResponse::InternalServerError().json(ApiResponse::<()> {
+            success: false,
+            data: None,
+            error: Some(err.to_string()),
+        }),
+    }
 }

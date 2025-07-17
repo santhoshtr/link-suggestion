@@ -162,7 +162,7 @@ function find_suggestion_in_offset(suggestions, offset) {
 	});
 }
 
-function show_suggestion(suggestion) {
+async function show_suggestion(suggestion) {
 	const container = document.getElementById("preview");
 	container.innerHTML = "";
 	const language = document.getElementById("language").value;
@@ -180,12 +180,115 @@ function show_suggestion(suggestion) {
 		const frequency_el = document.createElement("div");
 		frequency_el.innerText = `Linked ${suggestion.frequency} times in ${language} wikipedia`;
 		container.append(frequency_el);
+		const distributionButtonEl = document.createElement("button");
+		distributionButtonEl.innerText = "Link distribution";
+		distributionButtonEl.dataset.language = language;
+		container.append(distributionButtonEl);
+		await renderDistGraph(language, suggestion);
+		distributionButtonEl.addEventListener("click", () => {
+			document.getElementById("freq-dist-dialog").showModal();
+		});
 	}
-
 	container.style.display = "block";
 }
 
+async function renderDistGraph(language, suggestion) {
+	// Initialize the ECharts instance
+	const theme = detectTheme() === "dark" ? "dark" : "light";
+	var myChart = echarts.init(document.getElementById("freq-dist"), theme);
+
+	// Show a loading animation while we fetch data
+	myChart.showLoading();
+	// Make the chart responsive to window resizing
+	window.addEventListener("resize", function () {
+		myChart.resize();
+	});
+
+	// Fetch data from our Rust backend
+	return fetch(`/api/linkdistribution/${language}`)
+		.then((response) => {
+			if (!response.ok) {
+				throw new Error("Network response was not ok");
+			}
+			return response.json();
+		})
+		.then((serverData) => {
+			myChart.hideLoading();
+
+			// Update the chart options with the data from the server
+			myChart.setOption({
+				title: {
+					text: `Link distribution of ${language} wikipedia`,
+				},
+				tooltip: {
+					trigger: "axis",
+				},
+				xAxis: {
+					type: "category",
+					name: "Article Rank (Logarithmic scale)",
+					nameLocation: "middle",
+					nameGap: 50,
+					data: serverData.data.categories,
+				},
+				yAxis: {
+					type: "value",
+					name: "Link frequency (Logarithmic scale)",
+					nameLocation: "middle",
+					nameGap: 50,
+				},
+				series: [
+					{
+						data: serverData.data.data,
+						type: "line",
+						markLine: {
+							data: [
+								{
+									yAxis: Math.log10(suggestion.frequency),
+									label: {
+										formatter: `Title ${suggestion.title.normalized}, linked ${suggestion.frequency} times in ${language} wikipedia`,
+										position: "middle",
+									},
+								},
+							],
+						},
+					},
+				],
+			});
+		})
+		.catch((error) => {
+			myChart.hideLoading();
+			console.error("There was a problem with the fetch operation:", error);
+			// Optionally display an error message on the chart itself
+			myChart.setOption({
+				title: {
+					text: "Error!",
+					subtext: "Could not load chart data from the server.",
+				},
+			});
+		});
+}
+
 document.addEventListener("DOMContentLoaded", async function () {
+	// Click handler for links
+	document
+		.getElementById("wikitext")
+		.addEventListener("click", async function (event) {
+			const selection = window.getSelection();
+			if (selection.focusNode && this.contains(selection.focusNode)) {
+				const charOffset = selection.focusOffset;
+				const focussed_suggestion = find_suggestion_in_offset(
+					suggestions.concat(ml_suggestions),
+					charOffset,
+				);
+				// Show suggestion
+				if (focussed_suggestion) {
+					await show_suggestion(focussed_suggestion);
+				} else {
+					const container = document.getElementById("preview");
+					container.style.display = "none";
+				}
+			}
+		});
 	suggestions = await fetch_suggestions();
 	if (suggestions) {
 		clearHighlights();
@@ -235,25 +338,20 @@ document.addEventListener("DOMContentLoaded", async function () {
 		clearHighlights();
 		highlightLinks(suggestions, ml_suggestions || []);
 	}
-
-	// Click handler for links
-	document
-		.getElementById("wikitext")
-		.addEventListener("click", function (event) {
-			const selection = window.getSelection();
-			if (selection.focusNode && this.contains(selection.focusNode)) {
-				const charOffset = selection.focusOffset;
-				const focussed_suggestion = find_suggestion_in_offset(
-					suggestions.concat(ml_suggestions),
-					charOffset,
-				);
-				// Show suggestion
-				if (focussed_suggestion) {
-					show_suggestion(focussed_suggestion);
-				} else {
-					const container = document.getElementById("preview");
-					container.style.display = "none";
-				}
-			}
-		});
 });
+
+function detectTheme() {
+	// Check for saved theme preference or default to 'auto'
+	const savedTheme = localStorage.getItem("theme");
+
+	if (savedTheme) {
+		return savedTheme;
+	}
+
+	// If no saved preference, check system preference
+	if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+		return "dark";
+	}
+
+	return "light";
+}

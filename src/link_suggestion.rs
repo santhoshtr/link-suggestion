@@ -5,12 +5,12 @@ use crate::{
     wiki_title::WikiTitle,
     wikitext::{TextSegment, WikiLink},
 };
+use std::cmp::Ordering;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, LazyLock, Mutex},
 };
 use std::{fmt, sync::MutexGuard};
-use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 pub struct LinkSuggestion {
@@ -117,8 +117,8 @@ impl LinkSuggestion {
             return 0.0;
         }
 
-        ((self.frequency.unwrap() as f32).ln() - (freq_min as f32).ln())
-            / ((freq_max as f32).ln() - (freq_min as f32).ln())
+        ((self.frequency.unwrap() as f32).ln() - (freq_min as f32).log10())
+            / ((freq_max as f32).ln() - (freq_min as f32).log10())
     }
 
     pub fn process(&mut self, conn: Arc<Mutex<Connection>>) {
@@ -259,7 +259,10 @@ impl PartialOrd for LinkSuggestion {
 
 impl Ord for LinkSuggestion {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.text_segment.range.start_byte.cmp(&other.text_segment.range.start_byte)
+        self.text_segment
+            .range
+            .start_byte
+            .cmp(&other.text_segment.range.start_byte)
     }
 }
 
