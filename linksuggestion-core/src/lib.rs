@@ -146,6 +146,7 @@ pub async fn process_links_command(
     // Print filtered link suggestions
     let mut filtered_suggestions =
         filter_suggestions(link_suggestions, existing_links, &title.to_string());
+    // dbg!(&filtered_suggestions);
     // Use parallel iterator to process suggestions in multiple threads
     filtered_suggestions.par_iter_mut().for_each(|suggestion| {
         suggestion.process(source_article.clone(), shared_conn.clone());

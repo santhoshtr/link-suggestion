@@ -161,6 +161,10 @@ fn get_node_text(node: Node, source: &str) -> String {
 }
 
 impl TextSegment {
+    fn delimiter(&self)-> &str {
+         " "
+    }
+
     pub fn one_grams(&self) -> Vec<String> {
         self.text
             .split_whitespace()
@@ -198,12 +202,23 @@ impl TextSegment {
 
         trigrams
     }
+    pub fn four_grams(&self) -> Vec<String> {
+            let words = self.one_grams();
+            let mut fourgrams = Vec::new();
+
+            for i in 0..words.len().saturating_sub(3) {
+                fourgrams.push(format!("{} {} {} {}", words[i], words[i + 1], words[i + 2],words[i + 3]));
+            }
+
+            fourgrams
+        }
 
     pub fn link_candidates(&self) -> Vec<String> {
         let mut candidates = Vec::new();
         candidates.extend(self.one_grams());
         candidates.extend(self.bigrams());
         candidates.extend(self.trigrams());
+        candidates.extend(self.four_grams());
         candidates
     }
 }

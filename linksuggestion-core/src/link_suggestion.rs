@@ -39,6 +39,14 @@ struct LinkRecord {
     pub frequency: usize,
 }
 
+// Helper function to remove punctuation
+fn strip_punctuation(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_ascii_punctuation() && !c.is_whitespace())
+        .collect::<String>()
+        .to_lowercase()
+}
+
 // Global cache for freq_max values by language
 static FREQ_MAX_CACHE: LazyLock<Arc<Mutex<HashMap<String, usize>>>> =
     LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
@@ -122,7 +130,6 @@ impl LinkSuggestion {
 
         if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
             // Edge cases: A title for the label could not be found.
-            dbg!(&self.label);
             return 0.0;
         }
 
@@ -138,8 +145,7 @@ impl LinkSuggestion {
             self.title = WikiTitle::new(&link_record.0, self.title.language().to_string());
             self.frequency = Some(link_record.1);
         }
-        if !self.is_valid_title(conn.lock().unwrap()) {
-            self.frequency = Some(0);
+        if self.frequency == Some(0) {
             return;
         }
         self.frequency_max = self
@@ -200,38 +206,13 @@ impl LinkSuggestion {
         // See if winning_freq is > 0
         // Then another check to make sure we are not linking random articles - link label and link
         // title should match in case insensitive way.
-        if winning_freq > 0 && (self.label.to_lowercase() == first_record.0.to_lowercase()) {
+        if winning_freq > 0
+            && (strip_punctuation(&self.label) == strip_punctuation(&first_record.0))
+        {
             Ok(Some(first_record.clone()))
         } else {
             Ok(None)
         }
-    }
-
-    fn get_link_title_frequency(
-        &self,
-        connection: MutexGuard<'_, Connection>,
-    ) -> Result<Option<(String, usize)>, rusqlite::Error> {
-        let query = "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10".to_string();
-        let mut stmt = connection.prepare(&query)?;
-        let mut rows = stmt.query([&self.label.to_lowercase()])?;
-        let mut resp = Ok(None);
-
-        if let Some(first_row) = rows.next()? {
-            // Otherwise, return the data from the first row
-            let frequency: usize = first_row.get(1)?;
-            if frequency == 0 {
-                return Ok(None);
-            }
-            let title: String = first_row.get(0)?;
-            resp = Ok(Some((title, frequency)));
-        }
-        if rows.next()?.is_some() {
-            // more rows? Ambiguity
-            dbg!(&self.label);
-            return Ok(None);
-        }
-
-        resp
     }
 
     /// Calculates the byte positions required to convert the label to a wiki internal link.
@@ -304,10 +285,19 @@ impl PartialOrd for LinkSuggestion {
 
 impl Ord for LinkSuggestion {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.text_segment
+        // First compare by start_byte position
+        match self
+            .text_segment
             .range
             .start_byte
             .cmp(&other.text_segment.range.start_byte)
+        {
+            Ordering::Equal => {
+                // If start_byte is the same, compare by title as tiebreaker
+                self.label.cmp(&other.label)
+            }
+            other_ordering => other_ordering,
+        }
     }
 }
 
@@ -360,7 +350,7 @@ pub fn filter_suggestions(
         .filter(|candidate| {
             let normalized = candidate.title.normalized();
             // Deduplicate based on normalized title
-            if !seen_titles.insert(normalized.to_string()) {
+            if !seen_titles.insert(candidate.label.to_string()) {
                 return false;
             }
             // Remove candidates that are already present in existing WikiLinks
@@ -368,7 +358,7 @@ pub fn filter_suggestions(
                 .iter()
                 .any(|link| link.title.normalized() == normalized)
             {
-                return false;
+                return true;
             }
             if candidate.title.normalized() == current_article_title {
                 return false;

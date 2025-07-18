@@ -34,7 +34,6 @@ fn main() {
     let source_code = "\nLink to India should appear here\n";
     let mut tree = parser.parse(source_code, None).unwrap();
     let root_node = tree.root_node();
-    dbg!(root_node.to_sexp());
     let (start, end, new_end, replacement, linked_text) =
         calculate_link_edit_positions(source_code.to_string(), "India".to_string()).unwrap();
     tree.edit(&InputEdit {
