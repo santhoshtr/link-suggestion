@@ -1,0 +1,8 @@
+[package]
+name = "linksuggestion-bloom"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bloomfilter = "3.0.1"
+clap = { version = "4.0", features = ["derive"] }

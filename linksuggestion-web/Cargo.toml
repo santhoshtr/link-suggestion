@@ -1,0 +1,24 @@
+[package]
+name = "linksuggestion-web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+linksuggestion-core = { path = "../linksuggestion-core/" }
+serde = { version = "1.0", features = ["derive"] }
+clap = { version = "4.0", features = ["derive"] }
+lazy_static = "1.5.0"
+reqwest = { version = "0.12.12", default-features = false, features = [
+  "json",
+  "stream",
+  "rustls-tls",
+] }
+tokio = { version = "1.0", features = ["full"] }
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+bzip2 = "0.6.0"
+rayon = "1.10.0"
+actix-web = "4.10.2"
+actix-files = "0.6.6"
+env_logger = "0.11.7"
+handlebars = "6.3.2"
+serde_json = { version = "1.0", features = ["arbitrary_precision"] }

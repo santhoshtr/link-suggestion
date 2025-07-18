@@ -36,6 +36,7 @@ bloom/%.labels.bloom: titles/%.labels.list
 
 anchor-dictionaries/%.sqlite:
 	./target/release/anchor-dictionary \
+		--language $* \
 		--input /mnt/data/xmldatadumps/public/$*/latest/$*-latest-pages-articles.xml.bz2 \
 		--format sqlite \
 	  --output $@

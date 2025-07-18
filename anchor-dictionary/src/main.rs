@@ -1,19 +1,21 @@
 use clap::Parser;
+use linksuggestion_core::wiki_title::WikiTitle;
+use linksuggestion_core::wikitext::WikiText;
 use quick_xml::NsReader;
 use quick_xml::events::Event;
 use rusqlite::Connection;
 use rusqlite::params;
 use std::fs;
+use std::io::BufWriter;
 use std::io::Write;
-use wikitext::WikiText;
-mod wiki_title;
-mod wikitext;
 
 #[derive(Parser)]
 struct Args {
     /// bz2 compressed XML dump file from a wikipedia
     #[arg(short, long)]
     input: String,
+    #[arg(short, long)]
+    language: String,
 
     /// Output file name
     #[arg(short, long, default_value = "links.tsv")]
@@ -24,24 +26,25 @@ struct Args {
     format: String,
 
     /// Batch size for SQLite insertions
-    #[arg(short, long, default_value = "1000")]
+    #[arg(short, long, default_value = "10000")]
     batch_size: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct Article {
+    pub language: String,
     pub text: String,
     pub id: String,
     pub namespace: usize,
-    pub title: String,
+    pub title: WikiTitle,
     pub redirect: bool,
 }
 
 #[derive(Debug, Clone)]
 struct LinkRecord {
-    article_title: String,
-    link_title: String,
-    link_label: String,
+    pub article_title: String,
+    pub link_title: String,
+    pub link_label: String,
 }
 
 // Example usage
@@ -52,7 +55,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut articles_processed = 0;
     let mut parsing_errors = 0;
 
-    use std::io::BufWriter;
     let mut tsv_writer = if args.format == "tsv" {
         let tsv_file = fs::OpenOptions::new()
             .create(true)
@@ -72,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         conn.pragma_update(None, "cache_size", 1000000)?;
         conn.pragma_update(None, "temp_store", "memory")?;
         conn.pragma_update(None, "mmap_size", 268435456)?; // 256MB
+        // NOTE: All titles in this table are normalized. link_label is lowercase.
         conn.execute(
             "CREATE TABLE IF NOT EXISTS links (
                 article_title TEXT,
@@ -123,7 +126,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 stmt.execute(params![
                     record.article_title,
                     record.link_title,
-                    record.link_label,
+                    record.link_label.to_lowercase(),
                 ])?;
             }
         }
@@ -131,7 +134,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         batch.clear();
         Ok(())
     };
-
+    let language = if let Some(stripped) = args.language.strip_suffix("wiki") {
+        stripped
+    } else {
+        args.language.as_str()
+    };
     // Read the file and pass content to extract_links.
     let file_name = &args.input;
     let file = std::fs::File::open(file_name).unwrap();
@@ -142,10 +149,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     xml_reader.config_mut().trim_text(true);
     let mut buf = Vec::new();
     let mut article = Article {
+        language: language.to_owned(),
         text: String::new(),
         id: String::new(),
         namespace: 0,
-        title: String::new(),
+        title: WikiTitle::new("", language.to_uppercase()),
         redirect: false,
     };
     let mut tag_stack: Vec<String> = Vec::new();
@@ -200,7 +208,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         article.namespace = e.decode().unwrap().parse::<usize>().unwrap_or(999999);
                     }
                     "mediawiki/page/title" => {
-                        article.title = e.decode().unwrap().into_owned();
+                        article.title = WikiTitle::new(
+                            e.decode().unwrap().into_owned().as_str(),
+                            article.language.to_owned(),
+                        );
                     }
                     _ => (),
                 }
@@ -242,15 +253,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 writeln!(
                                     writer,
                                     "{}\t{}\t{}",
-                                    article.title, link.title, link_label,
+                                    article.title.normalized(),
+                                    link.title,
+                                    link_label,
                                 )?;
                             }
 
                             if conn.is_some() {
                                 batch_buffer.push(LinkRecord {
-                                    article_title: article.title.clone(),
+                                    article_title: article.title.normalized().to_string(),
                                     link_title: link.title.normalized().to_string(),
-                                    link_label: link_label.to_string(),
+                                    link_label: link_label.to_lowercase(),
                                 });
 
                                 // Flush batch when it reaches the specified size
@@ -262,12 +275,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             }
                         }
 
-                        if articles_processed % 1000 == 0 {
+                        if articles_processed % args.batch_size == 0 {
                             println!(
-                                "Articles processed: {}, Links collected: {}, Batch buffer size: {}",
-                                articles_processed,
-                                total_links,
-                                batch_buffer.len()
+                                "Articles processed: {articles_processed}, Links collected: {total_links} "
                             );
                         }
                     }

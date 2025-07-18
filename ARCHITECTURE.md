@@ -106,7 +106,7 @@ What we are observing here are the consequences of the assumption that outward l
 
 However, it is possible that the largest cluster of topics of outward links relates to the source article in many cases. For example, in the case of 'Rickshaw', the first four links—Wheel, Vehicle, Bicycle, and Motor—are related to the rickshaw and fall under Transportation. I would expect this pattern to exist for many articles. Because of this, topic classification based on the topics of outward links will work in most cases. However, it is very important to note that the reverse is not true—that an outward link is probable if its topic is related to the source article.
 
-For example, if a source article has 20 outward links and 5 of them are of topic T1, predicting T1 as the most probable topic for the source article may be acceptable. But the other 15 links have other topics, say, T2, T3, T4, T5, and T6. This implies that links in the source article could be to any topic from T1 to T6, and we cannot give a higher preference to links with topic T1.
+For example, if a source article has 20 outward links and 5 of them are of topic $T_1$, predicting $T_1$ as the most probable topic for the source article may be acceptable. But the other 15 links have other topics, say, $T_2$, $T_3$, $T_4$, $T_5$, and $T_6$. This implies that links in the source article could be to any topic from T1 to T6, and we cannot give a higher preference to links with topic $T_1$.
 
 Let's take another look at the link suggestions API by getting link suggestions for 'Mount Everest' in Simple Wikipedia.
 
@@ -230,7 +230,24 @@ I had mentioned about the false positive chances with bloom filters. When we do 
 
 ## Disambiguation
 
-The Confidence score is based on the global popularity of a link across the entire wiki. This can be a drawback in specific contexts. For example, in a computer science article, the term "Apple" is more likely to refer to the company than the fruit, but the system might suggest a link to "Apple (fruit)" if it is a more frequently linked-to article overall. I focus on preventing this happen instead of disambiguating. For the label "Apple", if we see that it is linked to multiple titles by the community, it indicates an ambiguity. My algorithm just discard such labels as of now. The ambiguity scenarios are more frequent in bigger wikis like English wikipedia, but not in the case of smaller wikipedias(Ancecdotal, more study required here).
+The Confidence score is based on the global popularity of a link across the entire wiki. This can be a drawback in specific contexts. For example, in a computer science article, the term "Apple" is more likely to refer to the company than the fruit, but the system might suggest a link to "Apple (fruit)" if it is a more frequently linked-to article overall.
+
+Disambiguation require semantic similarity approaches. This is usually done by machine learning approaches like vector embedding similarity of source context and target article. When I similarity, I don't mean similarity of source and target articles, as I already illustrated that their similarity has not much meaning for linking. To understand if Apple refer to Apple Inc. or Apple the fruit, we need to compare the contextual vector embedding the text fragment and compared with vector embedding of full article or article description of target article. This approach won't scale to the number of languages Wikipedia supports. It is also quite expensive to calculate vector embeddings at runtime.
+
+I use an alternate algorithm for disambiguation. The first step is identifying if there is an ambiguity to link target. Let us use a real example of [Greek Mythology](https://simple.wikipedia.org/wiki/Greek_mythology) article from simple.wikipedia.org. There is a word 'Hera' in it. Since the article is about Greek Mythology, we know that it should link to [Hera](https://simple.wikipedia.org/wiki/Hera), wife of Zeus. But in our database of all links, we see that the word 'hera' is also linked to [Hera Space mission](<https://simple.wikipedia.org/wiki/Hera_(space_mission)>). This is an example of ambiguity for the link target of word 'Hera'.
+
+If the link database does not have multiple records for the word, we can easily identify the link target. If that is not the case, we need to use some simple, efficient approaches to resolve ambiguity. We will check if 'Hera' article has links to Greek_mythology. We will also check if 'Hera space mission' has links to Greek_mythology. 'Hera' article has link to Greek_mythology in our case and we declare that as the winner. If target article already links back to the current source article it is an indication of similarity.
+
+Another example is the word 'Titan' in the same article. It can be `Titan_(Mythology)`, `Titan_(moon)`, `Mazda_Titan` etc. The above algorithm will successfully resolve it to `Titan_(Mythology)`.
+
+In some cases, we will not see any of the ambiguity records linking back to source article. In such case, a strict check is done as follows:
+
+1. The link label and link title should match in case insensitive way. This is one signal of similarity.
+2. The frequency of this record should be higher than the combined frequency of all other candidates.
+
+If this condition is met for a record, it wins the ambiguity resolution. If not, we just ignore the candidate and won't suggest for linking at all.
+
+(In my manual testing of this algorithm, I found that the word 'lead' wins the above check, without having the back links. As it has very high frequency of linking. I have not figured out a way to resolve this case in general.)
 
 ## Prediction
 

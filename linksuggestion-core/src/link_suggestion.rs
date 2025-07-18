@@ -1,4 +1,4 @@
-use rusqlite::Connection;
+use rusqlite::{Connection, fallible_iterator::FallibleIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -29,6 +29,14 @@ pub struct LinkSuggestionRecord {
     pub score: f32,
     // Add character indices
     pub wikitext_offset: usize,
+}
+
+#[derive(Debug, Clone)]
+struct LinkRecord {
+    pub article_title: String,
+    pub link_title: String,
+    pub link_label: String,
+    pub frequency: usize,
 }
 
 // Global cache for freq_max values by language
@@ -84,7 +92,7 @@ impl LinkSuggestion {
         }
 
         // Query database if not cached
-        let query = "SELECT COUNT(link_label) AS freq FROM Links GROUP BY link_label ORDER BY freq DESC LIMIT 1";
+        let query = "SELECT COUNT(link_title) as freq FROM Links GROUP BY link_title ORDER BY freq DESC LIMIT 1";
         let mut stmt = connection.prepare(query)?;
         let mut rows = stmt.query([])?;
 
@@ -113,7 +121,8 @@ impl LinkSuggestion {
         }
 
         if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
-            // Edge cases: A title for the lable could not be found.
+            // Edge cases: A title for the label could not be found.
+            dbg!(&self.label);
             return 0.0;
         }
 
@@ -121,19 +130,17 @@ impl LinkSuggestion {
             / ((freq_max as f32).ln() - (freq_min as f32).log10())
     }
 
-    pub fn process(&mut self, conn: Arc<Mutex<Connection>>) {
+    pub fn process(&mut self, source_article: WikiTitle, conn: Arc<Mutex<Connection>>) {
+        let res = self
+            .find_title_for_label(source_article, conn.lock().unwrap())
+            .unwrap();
+        if let Some(link_record) = res {
+            self.title = WikiTitle::new(&link_record.0, self.title.language().to_string());
+            self.frequency = Some(link_record.1);
+        }
         if !self.is_valid_title(conn.lock().unwrap()) {
             self.frequency = Some(0);
             return;
-        }
-        if self.title.raw() == "WE_WILL_FIGURE_OUT_LATER" {
-            let res = self.get_link_title_frequency(conn.lock().unwrap()).unwrap();
-            if let Some((title, frequency)) = res {
-                self.title = WikiTitle::new(&title, self.title.language().to_string());
-                self.frequency = Some(frequency);
-            }
-        } else {
-            self.frequency = self.get_link_frequency(conn.lock().unwrap()).unwrap();
         }
         self.frequency_max = self
             .get_freq_max(conn.lock().unwrap(), self.title.language())
@@ -145,48 +152,86 @@ impl LinkSuggestion {
             return false;
         }
         let mut stmt = connection
-            .prepare("SELECT 1 FROM links WHERE link_title = ?1 LIMIT 1")
+            .prepare("SELECT 1 FROM links WHERE article_title = ?1 LIMIT 1")
             .unwrap();
         stmt.exists([self.title.normalized()]).unwrap_or(false)
+    }
+
+    fn find_title_for_label(
+        &self,
+        source_article: WikiTitle,
+        connection: MutexGuard<'_, Connection>,
+    ) -> Result<Option<(String, usize)>, rusqlite::Error> {
+        let query = "SELECT  link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 4".to_string();
+        let mut stmt = connection.prepare(&query)?;
+        let rows = stmt.query([&self.label.to_lowercase()])?;
+
+        let link_record_items = rows.map(|r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+
+        let records: Vec<(String, usize)> = link_record_items.collect::<Vec<(String, usize)>>();
+
+        if records.is_empty() {
+            return Ok(None);
+        }
+
+        let first_record = &records[0];
+        if records.len() == 1 {
+            // Only one record. No ambiguity
+            return Ok(Some(first_record.clone()));
+        }
+
+        let mut winning_freq: i32 = first_record.1 as i32;
+        for record in &records {
+            // Let us see if the target article is linked to the current source article.
+            // If so, we can assume source and target articles are related.
+            // The suggestion will make them mutually linked.
+            let reverse_relation_query =
+                "SELECT 1 FROM links WHERE article_title = ?1 AND link_title = ?2 LIMIT 1";
+            let mut reverse_stmt = connection.prepare(reverse_relation_query).unwrap();
+            if reverse_stmt.exists([&record.0, source_article.normalized()])? {
+                // Target article links back to the source_article. Accept the candidate.
+                return Ok(Some(record.clone()));
+            }
+            // The winning_freq is the frequency of first candidate. It loses to other records.
+            if winning_freq != record.1 as i32 {
+                winning_freq -= record.1 as i32;
+            }
+        }
+        // See if winning_freq is > 0
+        // Then another check to make sure we are not linking random articles - link label and link
+        // title should match in case insensitive way.
+        if winning_freq > 0 && (self.label.to_lowercase() == first_record.0.to_lowercase()) {
+            Ok(Some(first_record.clone()))
+        } else {
+            Ok(None)
+        }
     }
 
     fn get_link_title_frequency(
         &self,
         connection: MutexGuard<'_, Connection>,
     ) -> Result<Option<(String, usize)>, rusqlite::Error> {
-        let query = "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 ORDER BY freq DESC LIMIT 2".to_string();
+        let query = "SELECT link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 10".to_string();
         let mut stmt = connection.prepare(&query)?;
-        let mut rows = stmt.query([&self.label])?;
+        let mut rows = stmt.query([&self.label.to_lowercase()])?;
         let mut resp = Ok(None);
-        // Check if there are multiple rows
+
         if let Some(first_row) = rows.next()? {
             // Otherwise, return the data from the first row
-            let title: String = first_row.get(0)?;
             let frequency: usize = first_row.get(1)?;
+            if frequency == 0 {
+                return Ok(None);
+            }
+            let title: String = first_row.get(0)?;
             resp = Ok(Some((title, frequency)));
         }
         if rows.next()?.is_some() {
-            // more rows?
+            // more rows? Ambiguity
+            dbg!(&self.label);
             return Ok(None);
         }
 
         resp
-    }
-
-    fn get_link_frequency(
-        &self,
-        connection: MutexGuard<'_, Connection>,
-    ) -> Result<Option<usize>, rusqlite::Error> {
-        let query = "SELECT link_title, count(link_title) as freq FROM links WHERE link_title = ?1 ORDER BY freq DESC LIMIT 1".to_string();
-        let mut stmt = connection.prepare(&query)?;
-        let mut rows = stmt.query([&self.title.normalized()])?;
-
-        if let Some(row) = rows.next()? {
-            let frequency: usize = row.get(1)?;
-            Ok(Some(frequency))
-        } else {
-            Ok(Some(0))
-        }
     }
 
     /// Calculates the byte positions required to convert the label to a wiki internal link.

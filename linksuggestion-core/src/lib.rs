@@ -1,19 +1,19 @@
+use database::get_db_connection;
 use link_suggestion::{LinkSuggestion, LinkSuggestionRecord, filter_suggestions};
+use linksuggestion_bloom::BloomFilterManager;
 use rayon::prelude::*;
-use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
 use wikitext::{TextSegment, WikiText};
 
-mod bloom_filter;
+mod database;
+pub mod freq_distribution;
 mod link_suggestion;
-mod wiki_title;
-mod wikitext;
-use bloom_filter::BloomFilterManager;
+pub mod wiki_title;
+pub mod wikitext;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LinkSuggestionsResult {
@@ -127,6 +127,7 @@ pub async fn process_links_command(
 ) -> io::Result<LinkSuggestionsResult> {
     let mut parser = WikiText::new().unwrap();
 
+    let source_article = WikiTitle::new(title, language.to_string());
     let mut wikitext = fetch_wikipedia_wikitext(language, title).await.unwrap();
     wikitext.push('\n');
     let existing_links = parser.extract_links(wikitext.as_str()).unwrap();
@@ -147,7 +148,7 @@ pub async fn process_links_command(
         filter_suggestions(link_suggestions, existing_links, &title.to_string());
     // Use parallel iterator to process suggestions in multiple threads
     filtered_suggestions.par_iter_mut().for_each(|suggestion| {
-        suggestion.process(shared_conn.clone());
+        suggestion.process(source_article.clone(), shared_conn.clone());
     });
     // Print only suggestions that meet the confidence threshold
     let mut suggestions: Vec<LinkSuggestionRecord> = Vec::new();
@@ -174,61 +175,5 @@ pub async fn process_links_command(
         confidence_score: confidence_threshold,
         wikitext,
         suggestions,
-    })
-}
-
-fn get_db_connection(language: &str) -> Connection {
-    let db_path = format!("anchor-dictionaries/{language}wiki.sqlite");
-    Connection::open(&db_path).unwrap_or_else(|_| panic!("Error opening database {db_path}"))
-}
-
-#[derive(Serialize)]
-pub struct FreqDistribution {
-    categories: Vec<String>,
-    // The count of items within each category/bin.
-    data: Vec<f32>,
-}
-
-// The core logic for querying and processing the data.
-pub fn generate_chart_data(language: &str) -> Result<FreqDistribution, rusqlite::Error> {
-    let conn = get_db_connection(language);
-
-    let mut stmt = conn.prepare(
-        "select  count(link_title) as freq from links GROUP by link_title ORDER by freq desc",
-    )?;
-
-    let freqs = stmt.query_map([], |row| row.get(0))?;
-
-    let mut bins: HashMap<String, f32> = HashMap::new();
-
-    let mut rank = 1;
-    for freq_result in freqs {
-        let freq: u32 = freq_result?;
-        let normalized_rank = (rank as f32).log10();
-        let normalized_freq = (freq as f32).log10();
-        let rounded = format!("{normalized_rank:.2}");
-        bins.insert(rounded, normalized_freq);
-        rank += 1;
-    }
-
-    // change to sort the categories by their numeric key. AI?
-    let mut sorted_categories: Vec<String> = bins.keys().cloned().collect();
-    sorted_categories.sort_by(|a, b| {
-        let a_val: f32 = a.parse().unwrap_or(0.0);
-        let b_val: f32 = b.parse().unwrap_or(0.0);
-        a_val
-            .partial_cmp(&b_val)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Create the data vector in the same order as the sorted categories
-    let sorted_data: Vec<f32> = sorted_categories
-        .iter()
-        .map(|category| *bins.get(category).unwrap_or(&0.0))
-        .collect();
-
-    Ok(FreqDistribution {
-        categories: sorted_categories,
-        data: sorted_data,
     })
 }

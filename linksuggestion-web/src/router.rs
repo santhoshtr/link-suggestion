@@ -1,6 +1,6 @@
 use actix_web::{HttpResponse, Responder, get, web};
 use handlebars::Handlebars;
-use linksuggestions::{generate_chart_data, process_links_command};
+use linksuggestion_core::{freq_distribution::generate_chart_data, process_links_command};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 

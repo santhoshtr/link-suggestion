@@ -1,14 +1,11 @@
 use clap::Parser;
-use linksuggestions::process_links_command;
+use linksuggestion_core::process_links_command;
 use std::io;
 
-mod bloom_filter;
 mod link_suggestion;
 mod wiki_title;
 mod wikitext;
 
-// Define the command-line interface using clap.
-// This struct will parse the main arguments.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 #[command(propagate_version = true)]
@@ -24,7 +21,6 @@ struct Cli {
     confidence: f32,
 }
 
-// The main function where the program execution begins.
 #[tokio::main]
 async fn main() -> io::Result<()> {
     // Parse the command-line arguments.

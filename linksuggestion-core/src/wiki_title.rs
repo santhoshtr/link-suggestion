@@ -39,6 +39,9 @@ impl WikiTitle {
 
     /// Normalizes a Wikipedia title according to Wikipedia conventions
     fn normalize_title(title: &str) -> String {
+        if title == "WE_WILL_FIGURE_OUT_LATER" {
+            return title.to_string();
+        }
         let mut normalized = title.trim().to_string();
 
         // Replace underscores with spaces
