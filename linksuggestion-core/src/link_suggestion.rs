@@ -358,7 +358,7 @@ pub fn filter_suggestions(
                 .iter()
                 .any(|link| link.title.normalized() == normalized)
             {
-                return true;
+                return false;
             }
             if candidate.title.normalized() == current_article_title {
                 return false;
