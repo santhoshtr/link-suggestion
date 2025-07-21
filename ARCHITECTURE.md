@@ -1,5 +1,3 @@
-Here is the corrected version of your documentation, with grammar mistakes fixed and minor sentence structure changes for better readability.
-
 # Link Suggestion System
 
 This document outlines the architecture of the link suggestion system.
