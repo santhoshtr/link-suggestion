@@ -51,6 +51,8 @@ fn process_title_candidates(
         .filter(|candidate| {
             let wiki_title = WikiTitle::new(candidate, language.to_owned());
             let normalized_title = wiki_title.normalized();
+            // Everything in titles bloom filter is normalized titles - with underscores instead of
+            // spaces.
             title_filter.exist(normalized_title)
         })
         .collect();
