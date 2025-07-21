@@ -38,6 +38,7 @@ pub struct Article {
     pub namespace: usize,
     pub title: WikiTitle,
     pub redirect: bool,
+    pub redirect_target: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,6 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut total_links = 0;
     let mut articles_processed = 0;
     let mut parsing_errors = 0;
+    let mut redirects_processed = 0;
 
     let mut tsv_writer = if args.format == "tsv" {
         let tsv_file = fs::OpenOptions::new()
@@ -84,6 +86,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             [],
         )?;
 
+        // Create redirects table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS redirects (
+                article_title TEXT,
+                target_title TEXT
+            )",
+            [],
+        )?;
+
         // Create index for better performance if querying later
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_article_title ON links(article_title)",
@@ -97,6 +108,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // For querying by link_label
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_link_label ON links(link_label)",
+            [],
+        )?;
+
+        // Create indexes for redirects table
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_redirects_article_title ON redirects(article_title)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_redirects_target_title ON redirects(target_title)",
             [],
         )?;
 
@@ -155,6 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         namespace: 0,
         title: WikiTitle::new("", language.to_uppercase()),
         redirect: false,
+        redirect_target: None,
     };
     let mut tag_stack: Vec<String> = Vec::new();
 
@@ -181,6 +203,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     article.id.clear();
                     article.namespace = 0;
                     article.redirect = false;
+                    article.redirect_target = None;
                 }
             }
             Ok(Event::Empty(e)) => {
@@ -192,7 +215,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .map(|c| c as char)
                     .collect::<String>();
                 if base_tag == "redirect" {
-                    article.redirect = true
+                    article.redirect = true;
+                    // Extract the title attribute
+                    for attr in e.attributes() {
+                        let attr = attr.unwrap();
+                        if attr.key.into_inner() == b"title" {
+                            article.redirect_target = Some(
+                                String::from_utf8_lossy(&attr.value).into_owned()
+                            );
+                            break;
+                        }
+                    }
                 }
             }
             Ok(Event::Text(e)) => {
@@ -222,6 +255,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if path.as_str() == "mediawiki/page/revision/text" {
                     article.text.push('\n');
 
+                    // Handle redirects
+                    if article.redirect && article.redirect_target.is_some() {
+                        if let Some(ref mut connection) = conn {
+                            let redirect_target = WikiTitle::new(
+                                article.redirect_target.as_ref().unwrap(),
+                                article.language.to_owned(),
+                            );
+                            connection.execute(
+                                "INSERT INTO redirects (article_title, target_title) VALUES (?1, ?2)",
+                                params![
+                                    article.title.normalized(),
+                                    redirect_target.normalized(),
+                                ],
+                            )?;
+                            redirects_processed += 1;
+                        }
+                    }
+
                     // Only process links if namespace is 0 and redirect is false
                     if article.namespace == 0 && !article.redirect {
                         articles_processed += 1;
@@ -246,8 +297,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         total_links += links.len();
 
                         for link in links.iter() {
-                            let link_label =
-                                link.label.as_deref().unwrap_or(link.title.normalized());
+                            let link_label = link.label.as_deref().unwrap_or(link.title.raw());
 
                             if let Some(ref mut writer) = tsv_writer {
                                 writeln!(
@@ -277,7 +327,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                         if articles_processed % args.batch_size == 0 {
                             println!(
-                                "Articles processed: {articles_processed}, Links collected: {total_links} "
+                                "[{language}] Articles processed: {articles_processed}, Links collected: {total_links} "
                             );
                         }
                     }
@@ -293,7 +343,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!(
-        "Articles processed: {articles_processed}\nLinks collected: {total_links}\nErrors: {parsing_errors}\n",
+        "[{language}] Articles processed: {articles_processed}\nLinks collected: {total_links}\nRedirects processed: {redirects_processed}\nErrors: {parsing_errors}\n",
     );
     Ok(())
 }
