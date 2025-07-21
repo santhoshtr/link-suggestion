@@ -4,7 +4,7 @@
 # =========================================================
 
 # Query to find all page titles
-PAGEQUERY := "select page_title from page where page_namespace=0 and page_is_redirect = 0"
+PAGEQUERY := "SELECT page_title FROM page WHERE page_namespace=0" 
 wikipedia.list:
 	curl -s https://noc.wikimedia.org/conf/dblists/closed.dblist > closed.dblist 
 	curl -s https://noc.wikimedia.org/conf/dblists/wikipedia.dblist | grep -E 'wiki$$' | grep -v '^#' | grep -v -f closed.dblist > $@
