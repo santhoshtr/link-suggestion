@@ -26,8 +26,6 @@ See <https://meta.wikimedia.org/wiki/Research:Link_recommendation_model_for_add-
 
 The existing system for link suggestions is a machine learning-based approach, developed by the Wikimedia Foundation's research team and operated by the Machine Learning team. It is an XGBoost-based classifier system. There are ongoing efforts to make it work for more languages and avoid having individual models per language.
 
-Semantic similarity of Wikipedia articles is a hard problem. Vector embeddings of the content need to be created first, and then the similarity needs to be calculated using techniques like cosine similarity. To calculate vector embeddings, we need embedding models, and their availability and performance are also a concern.
-
 ### Machine Learning Approach
 
 I approached the problem by reading the research about link suggestions and trying to understand the problem modeling. A question I had was why this problem is considered probabilistic and where the need for machine learning arises.
