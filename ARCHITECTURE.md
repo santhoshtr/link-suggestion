@@ -1,6 +1,6 @@
 # Link Suggestion System
 
-This document outlines the architecture of the link suggestion system.
+This document outlines the architecture of the link suggestion system implemented in this project.
 
 ## Introduction
 
@@ -104,7 +104,7 @@ What we are observing here are the consequences of the assumption that outward l
 
 However, it is possible that the largest cluster of topics of outward links relates to the source article in many cases. For example, in the case of 'Rickshaw', the first four links—Wheel, Vehicle, Bicycle, and Motor—are related to the rickshaw and fall under Transportation. I would expect this pattern to exist for many articles. Because of this, topic classification based on the topics of outward links will work in most cases. However, it is very important to note that the reverse is not true—that an outward link is probable if its topic is related to the source article.
 
-For example, if a source article has 20 outward links and 5 of them are of topic $T_1$, predicting $T_1$ as the most probable topic for the source article may be acceptable. But the other 15 links have other topics, say, $T_2$, $T_3$, $T_4$, $T_5$, and $T_6$. This implies that links in the source article could be to any topic from T1 to T6, and we cannot give a higher preference to links with topic $T_1$.
+For example, if a source article has 20 outward links and 5 of them are of topic $T_1$, predicting $T_1$ as the most probable topic for the source article may be acceptable. But the other 15 links have other topics, say, $T_2, T_3, T_4, T_5,  T_6$. This implies that links in the source article could be to any topic from T1 to T6, and we cannot give a higher preference to links with topic $T_1$.
 
 Let's take another look at the link suggestions API by getting link suggestions for 'Mount Everest' in Simple Wikipedia.
 
