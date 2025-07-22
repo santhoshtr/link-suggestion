@@ -141,7 +141,7 @@ Instead, our system builds a bloom filter of all titles in a wiki. This is prepa
 
 ```bash
 $ time make  bloom/simplewiki.bloom
-echo "select page_title from page where page_namespace=0 and page_is_redirect = 0" | analytics-mysql simplewiki > titles/simplewiki.titles.list
+echo "select page_title from page where page_namespace=0" | analytics-mysql simplewiki > titles/simplewiki.titles.list
 ./target/release/bloom-builder build -i titles/simplewiki.titles.list -o bloom/simplewiki.bloom
 Building Bloom filter with calculated capacity 271333 and false positive probability 0.001
 Added 271333 unique lines to the Bloom filter.
