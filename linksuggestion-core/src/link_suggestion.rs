@@ -148,6 +148,12 @@ impl LinkSuggestion {
         if self.frequency == Some(0) {
             return;
         }
+        // Now we want to see if the tille really exist. This is where we eliminate red links as
+        // well.
+        if !self.is_valid_title(conn.lock().unwrap()) {
+            self.frequency = Some(0);
+            return;
+        }
         self.frequency_max = self
             .get_freq_max(conn.lock().unwrap(), self.title.language())
             .unwrap();
@@ -160,7 +166,17 @@ impl LinkSuggestion {
         let mut stmt = connection
             .prepare("SELECT 1 FROM links WHERE article_title = ?1 LIMIT 1")
             .unwrap();
-        stmt.exists([self.title.normalized()]).unwrap_or(false)
+        if stmt.exists([self.title.normalized()]).unwrap_or(false) {
+            return true;
+        }
+        let mut stmt = connection
+            .prepare("SELECT 1 FROM redirects WHERE article_title = ?1 LIMIT 1")
+            .unwrap();
+        if stmt.exists([self.title.normalized()]).unwrap_or(false) {
+            return true;
+        }
+
+        false
     }
 
     fn find_title_for_label(
@@ -271,7 +287,10 @@ impl LinkSuggestion {
 impl PartialEq for LinkSuggestion {
     fn eq(&self, other: &Self) -> bool {
         // Two LinkSuggestions are equal if they have the same title or label
-        self.title.normalized() == other.title.normalized() || self.label == other.label
+        if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
+            return self.label == other.label;
+        }
+        self.title.normalized() == other.title.normalized()
     }
 }
 

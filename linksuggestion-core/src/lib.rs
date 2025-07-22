@@ -142,13 +142,13 @@ pub async fn process_links_command(
     let link_suggestions =
         process_text_segments(text_segments, &title_filter, &label_filter, language);
 
+    //dbg!(&link_suggestions);
     // Create a shared connection wrapped in Arc<Mutex<>>
     let connection = get_db_connection(language);
     let shared_conn = Arc::new(Mutex::new(connection));
-    // Print filtered link suggestions
     let mut filtered_suggestions =
         filter_suggestions(link_suggestions, existing_links, &title.to_string());
-    // dbg!(&filtered_suggestions);
+    //    dbg!(&filtered_suggestions);
     // Use parallel iterator to process suggestions in multiple threads
     filtered_suggestions.par_iter_mut().for_each(|suggestion| {
         suggestion.process(source_article.clone(), shared_conn.clone());
