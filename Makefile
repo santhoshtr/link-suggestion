@@ -31,7 +31,7 @@ titles/%.labels.list: anchor-dictionaries/%.sqlite
 bloom/%.bloom: titles/%.titles.list
 	./target/release/bloom-builder build -i titles/$*.titles.list -o $@
 
-bloom/%.labels.bloom: titles/%.labels.list
+bloom/%.labels.bloom: anchor-dictionaries/%.sqlite titles/%.labels.list
 	./target/release/bloom-builder build -i titles/$*.labels.list -o $@
 
 anchor-dictionaries/%.sqlite:
@@ -49,5 +49,6 @@ WIKI_ANCHOR_DICTIONARIES := $(addprefix anchor-dictionaries/, $(addsuffix .sqlit
 
 .PHONY: titles bloom anchor-dictionaries 
 titles: $(WIKI_TARGETS)
-bloom: $(WIKI_BLOOM_TARGETS) $(WIKI_BLOOM_LABELS_TARGETS)
+bloom: $(WIKI_BLOOM_TARGETS)
+bloom-labels: $(WIKI_BLOOM_LABELS_TARGETS)
 anchor-dictionaries: $(WIKI_BLOOM_TARGETS)
