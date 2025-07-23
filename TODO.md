@@ -1,4 +1,4 @@
 - [ ] create ticket
 - [ ] demo video?
 - [ ] Room and Room temperature are suggestions at same time(Oxygen from simple wiki). Discard smallest sequences when a higher sequence is present.
-- [ ] Consider adding redirects to anchor dict. 'oxford university' is linked to "Oxford_University" while the actual title is University of Oxford. Other one is redirect.
+- [ ] Consider intersection of inward and outward links as indicator for disambiguation. (or backlink is sufficient?)
