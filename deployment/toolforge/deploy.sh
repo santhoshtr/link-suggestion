@@ -31,6 +31,7 @@ done
 toolforge build start https://gitlab.wikimedia.org/toolforge-repos/linker
 # You can check the status of the build like this:
 # toolforge build show
-toolforge webservice buildservice start --mount=all
+toolforge webservice buildservice stop
+toolforge webservice buildservice start --cpu 3 --mem 2048Mi --mount=all
 # To see the logs for your web service, use:
 # toolforge webservice buildservice logs -f
