@@ -220,9 +220,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     for attr in e.attributes() {
                         let attr = attr.unwrap();
                         if attr.key.into_inner() == b"title" {
-                            article.redirect_target = Some(
-                                String::from_utf8_lossy(&attr.value).into_owned()
-                            );
+                            article.redirect_target =
+                                Some(String::from_utf8_lossy(&attr.value).into_owned());
                             break;
                         }
                     }
@@ -273,8 +272,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    // Only process links if namespace is 0 and redirect is false
-                    if article.namespace == 0 && !article.redirect {
+                    // Only process links if namespace is 0(main) and 10(template) and redirect is false
+                    if (article.namespace == 0 || article.namespace == 10) && !article.redirect {
                         articles_processed += 1;
                         let links = match parser.extract_links(&article.text) {
                             Ok(links) => links,
