@@ -29,10 +29,10 @@ titles/%.labels.list: anchor-dictionaries/%.sqlite
 	./target/release/sqlite-cli --database $< --query "SELECT DISTINCT link_label FROM links" > $@
 	
 bloom/%.bloom: titles/%.titles.list
-	./target/release/bloom-builder build -i titles/$*.titles.list -o $@
+	./target/release/linksuggestion-bloom build -i titles/$*.titles.list -o $@
 
 bloom/%.labels.bloom: anchor-dictionaries/%.sqlite titles/%.labels.list
-	./target/release/bloom-builder build -i titles/$*.labels.list -o $@
+	./target/release/linksuggestion-bloom build -i titles/$*.labels.list -o $@
 
 anchor-dictionaries/%.sqlite:
 	./target/release/anchor-dictionary \
