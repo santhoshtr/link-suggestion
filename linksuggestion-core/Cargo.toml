@@ -5,8 +5,8 @@ edition = "2024"
 
 
 [dependencies]
+tree-sitter-wikitext = { git = "https://github.com/santhoshtr/tree-sitter-wikitext", rev = "7772030" }
 linksuggestion-bloom = { path = "../linksuggestion-bloom/" }
-tree-sitter-wikitext = { git = "https://github.com/santhoshtr/tree-sitter-wikitext", rev = "1da913a" }
 serde = { version = "1.0", features = ["derive"] }
 clap = { version = "4.0", features = ["derive"] }
 tree-sitter = "0.25.6"

@@ -2338,7 +2338,7 @@ checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 [[package]]
 name = "tree-sitter-wikitext"
 version = "0.1.0"
-source = "git+https://github.com/santhoshtr/tree-sitter-wikitext?rev=1da913a#1da913ab52c1e17d81ad8805c382f088707d14b3"
+source = "git+https://github.com/santhoshtr/tree-sitter-wikitext?rev=7772030#77720308a10793b0ee43f097daa6baec5ad91f6b"
 dependencies = [
  "cc",
  "tree-sitter-language",
