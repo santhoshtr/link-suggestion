@@ -79,13 +79,6 @@ impl WikiText {
         if let Some(tree) = tree {
             let root_node = tree.root_node();
             let mut query_cursor = QueryCursor::new();
-            // query_cursor.set_point_range(ops::Range {
-            //     start: Point { row: 0, column: 0 },
-            //     end: Point {
-            //         row: 200,
-            //         column: 0,
-            //     },
-            // });
             let mut captures =
                 query_cursor.captures(&self.link_query, root_node, wikitext.as_bytes());
 
@@ -161,11 +154,8 @@ fn get_node_text(node: Node, source: &str) -> String {
 }
 
 impl TextSegment {
-    fn delimiter(&self)-> &str {
-         " "
-    }
 
-    pub fn one_grams(&self) -> Vec<String> {
+    fn one_grams(&self) -> Vec<String> {
         self.text
             .split_whitespace()
             .map(|word| {
@@ -176,12 +166,12 @@ impl TextSegment {
             .filter(|word| {
                 !word.is_empty() 
                     && word.len() > 1  // Remove single letter words
-                    && !word.parse::<f64>().is_ok()  // Remove words that are numbers (including decimals)
+                    && word.parse::<f64>().is_err()  // Remove words that are numbers (including decimals)
             })
             .collect()
     }
 
-    pub fn bigrams(&self) -> Vec<String> {
+    fn bigrams(&self) -> Vec<String> {
         let words = self.one_grams();
         let mut bigrams = Vec::new();
 
@@ -192,7 +182,7 @@ impl TextSegment {
         bigrams
     }
 
-    pub fn trigrams(&self) -> Vec<String> {
+    fn trigrams(&self) -> Vec<String> {
         let words = self.one_grams();
         let mut trigrams = Vec::new();
 
@@ -202,7 +192,7 @@ impl TextSegment {
 
         trigrams
     }
-    pub fn four_grams(&self) -> Vec<String> {
+    fn four_grams(&self) -> Vec<String> {
             let words = self.one_grams();
             let mut fourgrams = Vec::new();
 
