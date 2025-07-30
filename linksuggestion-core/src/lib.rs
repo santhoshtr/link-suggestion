@@ -25,15 +25,20 @@ pub struct LinkSuggestionsResult {
 }
 
 fn load_bloom_filters(language: &str) -> (BloomFilterManager, BloomFilterManager) {
-    let link_title_bloom_filter_file = PathBuf::from(format!("bloom/{language}wiki.bloom"));
+    let data_dir = std::env::var("TOOL_DATA_DIR").unwrap_or_else(|_| ".".to_string());
+
+    let link_title_bloom_filter_file =
+        PathBuf::from(format!("{data_dir}/bloom/{language}wiki.bloom"));
     let link_title_filter_manager =
         BloomFilterManager::load_from_file(&link_title_bloom_filter_file)
-            .unwrap_or_else(|_| panic!("Error reading file bloom/{language}wiki.bloom"));
+            .unwrap_or_else(|_| panic!("Error reading file {data_dir}/bloom/{language}wiki.bloom"));
 
-    let link_label_bloom_filter_file = PathBuf::from(format!("bloom/{language}wiki.labels.bloom"));
+    let link_label_bloom_filter_file =
+        PathBuf::from(format!("{data_dir}/bloom/{language}wiki.labels.bloom"));
     let link_label_filter_manager =
-        BloomFilterManager::load_from_file(&link_label_bloom_filter_file)
-            .unwrap_or_else(|_| panic!(" Error reading file bloom/{language}wiki.labels.bloom"));
+        BloomFilterManager::load_from_file(&link_label_bloom_filter_file).unwrap_or_else(|_| {
+            panic!(" Error reading file {data_dir}/bloom/{language}wiki.labels.bloom")
+        });
 
     (link_title_filter_manager, link_label_filter_manager)
 }
