@@ -194,9 +194,15 @@ async function show_suggestion(suggestion) {
 
 async function renderDistGraph(language, suggestion) {
 	// Initialize the ECharts instance
-	const theme = detectTheme() === "dark" ? "dark" : "light";
+	const darkModeMediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+	const isDarkMode = darkModeMediaQuery.matches;
+	const theme = isDarkMode ? "dark" : "default";
 	var myChart = echarts.init(document.getElementById("freq-dist"), theme);
-
+	function updateDarkMode() {
+		const isDarkMode = darkModeMediaQuery.matches;
+		myChart.setTheme(isDarkMode ? "dark" : "default");
+	}
+	darkModeMediaQuery.addEventListener("change", () => updateDarkMode);
 	// Show a loading animation while we fetch data
 	myChart.showLoading();
 	// Make the chart responsive to window resizing
@@ -339,19 +345,3 @@ document.addEventListener("DOMContentLoaded", async function () {
 		highlightLinks(suggestions, ml_suggestions || []);
 	}
 });
-
-function detectTheme() {
-	// Check for saved theme preference or default to 'auto'
-	const savedTheme = localStorage.getItem("theme");
-
-	if (savedTheme) {
-		return savedTheme;
-	}
-
-	// If no saved preference, check system preference
-	if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-		return "dark";
-	}
-
-	return "light";
-}
