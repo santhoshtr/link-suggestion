@@ -1,4 +1,4 @@
 - [ ] create ticket
-- [ ] demo video?
 - [ ] Room and Room temperature are suggestions at same time(Oxygen from simple wiki). Discard smallest sequences when a higher sequence is present.
 - [ ] Consider intersection of inward and outward links as indicator for disambiguation. (or backlink is sufficient?)
+- [ ] move the data preparation to toolforge jobs - they can access dumps, wiki replicas.
