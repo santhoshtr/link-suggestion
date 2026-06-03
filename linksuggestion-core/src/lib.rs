@@ -16,6 +16,38 @@ mod link_suggestion;
 pub mod wiki_title;
 pub mod wikitext;
 
+/// Converts a list of byte offsets to character offsets in a single O(N) pass
+/// over `text`, rather than calling `chars().count()` separately per offset.
+fn byte_offsets_to_char_offsets(text: &str, byte_offsets: &[usize]) -> Vec<usize> {
+    // Pair each offset with its original index, sort by byte position.
+    let mut indexed: Vec<(usize, usize)> = byte_offsets.iter().copied().enumerate().collect();
+    indexed.sort_unstable_by_key(|&(_, b)| b);
+
+    let mut result = vec![0usize; byte_offsets.len()];
+    let mut char_idx = 0usize;
+    let mut byte_idx = 0usize;
+    let mut cursor = indexed.into_iter().peekable();
+
+    for ch in text.chars() {
+        // Emit char offsets for all targets sitting at the current byte position.
+        while let Some(&(orig, target_byte)) = cursor.peek() {
+            if byte_idx == target_byte {
+                result[orig] = char_idx;
+                cursor.next();
+            } else {
+                break;
+            }
+        }
+        byte_idx += ch.len_utf8();
+        char_idx += 1;
+    }
+    // Handle any targets at the very end of the string.
+    for (orig, _) in cursor {
+        result[orig] = char_idx;
+    }
+    result
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LinkSuggestionsResult {
     pub language: String,
@@ -172,25 +204,32 @@ pub async fn process_links_command(
     filtered_suggestions.par_iter_mut().for_each(|suggestion| {
         suggestion.process(source_article.clone(), shared_conn.clone());
     });
-    // Print only suggestions that meet the confidence threshold
-    let mut suggestions: Vec<LinkSuggestionRecord> = Vec::new();
-    for suggestion in &filtered_suggestions {
-        if suggestion.confidence_score() >= confidence_threshold {
-            let char_start = suggestion
-                .calculate_link_positions_with_char_indices(&wikitext)
-                .unwrap();
+    // Collect accepted suggestions above the confidence threshold.
+    let accepted: Vec<&LinkSuggestion> = filtered_suggestions
+        .iter()
+        .filter(|s| s.confidence_score() >= confidence_threshold)
+        .collect();
 
-            // Calculate new offsets taking into account previous replacements
-            suggestions.push(LinkSuggestionRecord {
-                language: language.to_string(),
-                title: suggestion.title.to_owned(),
-                link_text: suggestion.label.to_owned(),
-                frequency: suggestion.frequency.unwrap_or_default(),
-                score: suggestion.confidence_score(),
-                wikitext_offset: char_start,
-            });
-        }
-    }
+    // Gather byte offsets and convert to char offsets in a single O(N) pass
+    // over the wikitext, rather than doing an O(N) chars().count() per suggestion.
+    let byte_offsets: Vec<usize> = accepted
+        .iter()
+        .map(|s| s.link_start_byte().unwrap_or(0))
+        .collect();
+    let char_offsets = byte_offsets_to_char_offsets(&wikitext, &byte_offsets);
+
+    let suggestions: Vec<LinkSuggestionRecord> = accepted
+        .iter()
+        .zip(char_offsets)
+        .map(|(suggestion, char_start)| LinkSuggestionRecord {
+            language: language.to_string(),
+            title: suggestion.title.to_owned(),
+            link_text: suggestion.label.to_owned(),
+            frequency: suggestion.frequency.unwrap_or_default(),
+            score: suggestion.confidence_score(),
+            wikitext_offset: char_start,
+        })
+        .collect();
     Ok(LinkSuggestionsResult {
         language: language.to_string(),
         title: title.to_string(),

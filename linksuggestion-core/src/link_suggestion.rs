@@ -263,6 +263,17 @@ impl LinkSuggestion {
         }
     }
 
+    /// Returns the absolute byte offset of the label's start within the full wikitext.
+    /// Returns `None` if the label cannot be found in the text segment.
+    pub fn link_start_byte(&self) -> Option<usize> {
+        let label_start = self
+            .text_segment
+            .text
+            .to_lowercase()
+            .find(self.label.to_lowercase().as_str())?;
+        Some(self.text_segment.range.start_byte + label_start)
+    }
+
     /// Returns character indices along with byte indices
     pub fn calculate_link_positions_with_char_indices(&self, full_text: &String) -> Option<usize> {
         let text = &self.text_segment.text;
