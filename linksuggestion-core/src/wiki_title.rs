@@ -152,7 +152,7 @@ pub async fn fetch_wikipedia_wikitext(
     title: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let url = format!(
-        "https://{language}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&format=json&titles={title}&&formatversion=2&redirects=1"
+        "https://{language}.wikipedia.org/w/api.php?action=query&prop=revisions&rvprop=content&format=json&titles={title}&formatversion=2&redirects=1"
     );
 
     let client = reqwest::Client::new();
@@ -160,7 +160,7 @@ pub async fn fetch_wikipedia_wikitext(
         .get(&url)
         .header(
             "User-Agent",
-            "WikiLink-Suggester/1.0 (https://github.com/example/wikilink-suggester)",
+            "WikiLink-Suggester/1.0 (https://gitlab.wikimedia.org/toolforge-repos/linker)",
         )
         .send()
         .await?;

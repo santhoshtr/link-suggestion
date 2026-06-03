@@ -1,6 +1,6 @@
 use clap::Parser;
 use linksuggestion_core::process_links_command;
-use std::io;
+use std::error::Error;
 
 mod link_suggestion;
 mod wiki_title;
@@ -22,7 +22,7 @@ struct Cli {
 }
 
 #[tokio::main]
-async fn main() -> io::Result<()> {
+async fn main() -> Result<(), Box<dyn Error>> {
     // Parse the command-line arguments.
     let cli = Cli::parse();
 

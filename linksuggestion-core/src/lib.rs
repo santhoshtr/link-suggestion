@@ -3,7 +3,7 @@ use link_suggestion::{LinkSuggestion, LinkSuggestionRecord, filter_suggestions};
 use linksuggestion_bloom::BloomFilterManager;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::io;
+use std::error::Error;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
@@ -131,11 +131,11 @@ pub async fn process_links_command(
     language: &str,
     title: &str,
     confidence_threshold: f32,
-) -> io::Result<LinkSuggestionsResult> {
+) -> Result<LinkSuggestionsResult, Box<dyn Error>> {
     let mut parser = WikiText::new().unwrap();
 
     let source_article = WikiTitle::new(title, language.to_string());
-    let mut wikitext = fetch_wikipedia_wikitext(language, title).await.unwrap();
+    let mut wikitext = fetch_wikipedia_wikitext(language, title).await?;
     wikitext.push('\n');
     let existing_links = parser.extract_links(wikitext.as_str()).unwrap();
     let text_segments = parser.extract_text(wikitext.as_str()).unwrap();
