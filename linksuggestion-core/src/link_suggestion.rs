@@ -6,11 +6,11 @@ use crate::{
     wikitext::{TextSegment, WikiLink},
 };
 use std::cmp::Ordering;
+use std::fmt;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, LazyLock, Mutex},
 };
-use std::{fmt, sync::MutexGuard};
 
 #[derive(Debug, Clone)]
 pub struct LinkSuggestion {
@@ -88,7 +88,7 @@ impl LinkSuggestion {
 
     fn get_freq_max(
         &self,
-        connection: MutexGuard<'_, Connection>,
+        connection: &Connection,
         language: &str,
     ) -> Result<i64, rusqlite::Error> {
         // Check cache first
@@ -136,10 +136,8 @@ impl LinkSuggestion {
         ((fc.ln() - freq_min.ln()) / (freq_max.ln() - freq_min.ln())).clamp(0.0, 1.0)
     }
 
-    pub fn process(&mut self, source_article: WikiTitle, conn: Arc<Mutex<Connection>>) {
-        let res = self
-            .find_title_for_label(source_article, conn.lock().unwrap())
-            .unwrap();
+    pub fn process(&mut self, source_article: WikiTitle, conn: &Connection) {
+        let res = self.find_title_for_label(source_article, conn).unwrap();
         if let Some(link_record) = res {
             self.title = WikiTitle::new(&link_record.0, self.title.language().to_string());
             self.frequency = Some(link_record.1);
@@ -149,16 +147,14 @@ impl LinkSuggestion {
         }
         // Now we want to see if the tille really exist. This is where we eliminate red links as
         // well.
-        if !self.is_valid_title(conn.lock().unwrap()) {
+        if !self.is_valid_title(conn) {
             self.frequency = Some(0);
             return;
         }
-        self.frequency_max = self
-            .get_freq_max(conn.lock().unwrap(), self.title.language())
-            .unwrap();
+        self.frequency_max = self.get_freq_max(conn, self.title.language()).unwrap();
     }
 
-    fn is_valid_title(&self, connection: MutexGuard<'_, Connection>) -> bool {
+    fn is_valid_title(&self, connection: &Connection) -> bool {
         if !self.title.is_valid() {
             return false;
         }
@@ -181,7 +177,7 @@ impl LinkSuggestion {
     fn find_title_for_label(
         &self,
         source_article: WikiTitle,
-        connection: MutexGuard<'_, Connection>,
+        connection: &Connection,
     ) -> Result<Option<(String, i64)>, rusqlite::Error> {
         let query = "SELECT  link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 20".to_string();
         let mut stmt = connection.prepare_cached(&query)?;

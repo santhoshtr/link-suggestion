@@ -1,4 +1,4 @@
-use database::get_db_connection;
+use database::with_connection;
 use link_suggestion::{LinkSuggestion, LinkSuggestionRecord, filter_suggestions};
 use linksuggestion_bloom::BloomFilterManager;
 use rayon::prelude::*;
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, Mutex, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
 use wikitext::{TextSegment, WikiText};
 
@@ -194,15 +194,15 @@ pub async fn process_links_command(
         process_text_segments(text_segments, &title_filter, &label_filter, language);
 
     //dbg!(&link_suggestions);
-    // Create a shared connection wrapped in Arc<Mutex<>>
-    let connection = get_db_connection(language);
-    let shared_conn = Arc::new(Mutex::new(connection));
     let mut filtered_suggestions =
         filter_suggestions(link_suggestions, existing_links, &title.to_string());
     //    dbg!(&filtered_suggestions);
-    // Use parallel iterator to process suggestions in multiple threads
+    // Process suggestions in parallel. Each rayon thread lazily gets its own
+    // per-language SQLite connection from the thread-local pool.
     filtered_suggestions.par_iter_mut().for_each(|suggestion| {
-        suggestion.process(source_article.clone(), shared_conn.clone());
+        with_connection(language, |conn| {
+            suggestion.process(source_article.clone(), conn);
+        });
     });
     // Collect accepted suggestions above the confidence threshold.
     let accepted: Vec<&LinkSuggestion> = filtered_suggestions
