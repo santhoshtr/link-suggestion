@@ -1,7 +1,6 @@
 use database::with_connection;
 use link_suggestion::{LinkSuggestion, LinkSuggestionRecord, filter_suggestions};
 use linksuggestion_bloom::BloomFilterManager;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::error::Error;
@@ -197,12 +196,13 @@ pub async fn process_links_command(
     let mut filtered_suggestions =
         filter_suggestions(link_suggestions, existing_links, &title.to_string());
     //    dbg!(&filtered_suggestions);
-    // Process suggestions in parallel. Each rayon thread lazily gets its own
-    // per-language SQLite connection from the thread-local pool.
-    filtered_suggestions.par_iter_mut().for_each(|suggestion| {
-        with_connection(language, |conn| {
+    // Process suggestions sequentially, reusing one pooled connection for the
+    // whole batch. Each candidate is a handful of microsecond point lookups, so
+    // the work does not justify a rayon thread pool.
+    with_connection(language, |conn| {
+        for suggestion in &mut filtered_suggestions {
             suggestion.process(source_article.clone(), conn);
-        });
+        }
     });
     // Collect accepted suggestions above the confidence threshold.
     let accepted: Vec<&LinkSuggestion> = filtered_suggestions
