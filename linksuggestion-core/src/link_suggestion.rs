@@ -183,7 +183,7 @@ impl LinkSuggestion {
         source_article: WikiTitle,
         connection: MutexGuard<'_, Connection>,
     ) -> Result<Option<(String, i64)>, rusqlite::Error> {
-        let query = "SELECT  link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 4".to_string();
+        let query = "SELECT  link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 20".to_string();
         let mut stmt = connection.prepare_cached(&query)?;
         let rows = stmt.query([&self.label.to_lowercase()])?;
 
