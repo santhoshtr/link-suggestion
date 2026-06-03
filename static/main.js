@@ -150,6 +150,17 @@ function highlightLinks(suggestions, ml_suggestions) {
 	CSS.highlights.set("suggestedlinkml", h_ml);
 }
 
+// Highlight only the algorithm currently chosen in the selector, so exactly one
+// algorithm is active at a time.
+function renderHighlights() {
+	const algorithm = document.getElementById("algorithm").value;
+	if (algorithm === "ml") {
+		highlightLinks([], ml_suggestions || []);
+	} else {
+		highlightLinks(suggestions || [], []);
+	}
+}
+
 function find_suggestion_in_offset(suggestions, offset) {
 	// Find a suggestion in suggestions where the offset is inside the char_offset_start..char_offset_end range.
 	if (!suggestions || !suggestions.length) {
@@ -297,8 +308,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 		});
 	suggestions = await fetch_suggestions();
 	if (suggestions) {
-		clearHighlights();
-		highlightLinks(suggestions, ml_suggestions || []);
+		renderHighlights();
 	}
 	ml_suggestions = await fetch_ml_suggestions();
 	document
@@ -308,8 +318,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 			ml_suggestions = await fetch_ml_suggestions();
 			event.preventDefault();
 			if (suggestions) {
-				clearHighlights();
-				highlightLinks(suggestions, ml_suggestions || []);
+				renderHighlights();
 			}
 			return false;
 		});
@@ -319,29 +328,16 @@ document.addEventListener("DOMContentLoaded", async function () {
 		.getElementById("confidence_score")
 		.addEventListener("change", async function (event) {
 			if (suggestions) {
-				clearHighlights();
-				highlightLinks(suggestions, ml_suggestions || []);
+				renderHighlights();
 			}
 		});
 	document
 		.getElementById("algorithm")
-		.addEventListener("change", async function (event) {
-			const algorithm = event.target.value;
-			if (algorithm == "all") {
-				highlightLinks(suggestions, ml_suggestions);
-			}
-			if (algorithm == "new") {
-				clearHighlights();
-				highlightLinks(suggestions, []);
-			}
-			if (algorithm == "ml") {
-				clearHighlights();
-				highlightLinks([], ml_suggestions);
-			}
+		.addEventListener("change", function () {
+			renderHighlights();
 		});
 
 	if (suggestions) {
-		clearHighlights();
-		highlightLinks(suggestions, ml_suggestions || []);
+		renderHighlights();
 	}
 });
