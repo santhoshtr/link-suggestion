@@ -100,7 +100,7 @@ impl LinkSuggestion {
         }
 
         // Query database if not cached
-        let query = "SELECT COUNT(link_title) as freq FROM Links GROUP BY link_title ORDER BY freq DESC LIMIT 1";
+        let query = "SELECT COUNT(link_title) as freq FROM links GROUP BY link_title ORDER BY freq DESC LIMIT 1";
         let mut stmt = connection.prepare_cached(query)?;
         let mut rows = stmt.query([])?;
 
@@ -151,7 +151,17 @@ impl LinkSuggestion {
             self.frequency = Some(0);
             return;
         }
+        // F_c for the confidence score must be the title's total link frequency
+        // (title-grain) so it shares the same scale as F_max. The pair count from
+        // find_title_for_label above is only used for candidate ranking.
+        self.frequency = Some(self.get_title_frequency(conn).unwrap());
         self.frequency_max = self.get_freq_max(conn, self.title.language()).unwrap();
+    }
+
+    fn get_title_frequency(&self, connection: &Connection) -> Result<i64, rusqlite::Error> {
+        let mut stmt = connection
+            .prepare_cached("SELECT COUNT(*) AS freq FROM links WHERE link_title = ?1")?;
+        stmt.query_row([self.title.normalized()], |row| row.get(0))
     }
 
     fn is_valid_title(&self, connection: &Connection) -> bool {
