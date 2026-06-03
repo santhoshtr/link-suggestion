@@ -235,3 +235,80 @@ pub async fn process_links_command(
         suggestions,
     })
 }
+
+/// Debugging helper: report whether a single word or phrase can be turned into a
+/// link, printing its candidate-title frequency distribution and the resulting
+/// confidence score. Bloom membership is shown for context (it is only a fast
+/// pre-filter); the SQLite anchor dictionary is the ground truth.
+pub fn debug_text_command(language: &str, text: &str) -> Result<(), Box<dyn Error>> {
+    fn hit(present: bool) -> &'static str {
+        if present { "HIT" } else { "MISS" }
+    }
+
+    let bloom_pair = load_bloom_filters(language);
+    let (title_filter, label_filter) = (&bloom_pair.0, &bloom_pair.1);
+
+    let as_title = WikiTitle::new(text, language.to_string());
+    println!("Text: {text:?}  (language: {language})");
+    println!(
+        "  title bloom [{}]: {}",
+        as_title.normalized(),
+        hit(title_filter.exist(as_title.normalized()))
+    );
+    let lowercased = text.to_lowercase();
+    println!(
+        "  label bloom [{}]: {}   (lowercased [{}]: {})",
+        text,
+        hit(label_filter.exist(text)),
+        lowercased,
+        hit(label_filter.exist(&lowercased)),
+    );
+
+    with_connection(language, |conn| {
+        // The text segment is irrelevant to the frequency/score lookups; give it a
+        // dummy range covering the text.
+        let segment = TextSegment {
+            text: text.to_string(),
+            range: tree_sitter::Range {
+                start_byte: 0,
+                end_byte: text.len(),
+                start_point: tree_sitter::Point { row: 0, column: 0 },
+                end_point: tree_sitter::Point {
+                    row: 0,
+                    column: text.len(),
+                },
+            },
+        };
+        let mut suggestion = LinkSuggestion::new_with_label(segment, text.to_string());
+
+        let distribution = suggestion.candidate_distribution(conn)?;
+        println!("  candidate titles for label {lowercased:?} (count : title):");
+        if distribution.is_empty() {
+            println!("    (none — this text was never used as a link anchor)");
+        } else {
+            for (title, freq) in &distribution {
+                println!("    {freq:>8} : {title}");
+            }
+        }
+
+        // Resolve exactly as the pipeline would. With no source article the
+        // reverse-link disambiguation finds nothing, so the frequency/punctuation
+        // heuristic decides.
+        suggestion.process(WikiTitle::new("", language.to_string()), conn);
+        match (&suggestion.title, suggestion.frequency) {
+            (Some(title), Some(freq)) if freq > 0 => {
+                println!("  => linkable as [[{}]]", title.normalized());
+                println!("       F_c (title frequency): {freq}");
+                println!("       F_max (wiki maximum) : {}", suggestion.frequency_max);
+                println!(
+                    "       confidence score     : {:.4}",
+                    suggestion.confidence_score()
+                );
+            }
+            _ => println!("  => NOT linkable (no valid title resolved for this text)"),
+        }
+        Ok::<(), rusqlite::Error>(())
+    })?;
+
+    Ok(())
+}

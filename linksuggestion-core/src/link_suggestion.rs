@@ -206,18 +206,28 @@ impl LinkSuggestion {
         target.map(|t| WikiTitle::new(&t, title.language().to_string()))
     }
 
-    fn find_title_for_label(
+    /// The raw (label, title) pair-frequency distribution for this suggestion's
+    /// label: every title linked via that anchor with its occurrence count, most
+    /// frequent first. This is what disambiguation picks from.
+    pub fn candidate_distribution(
         &self,
-        source_article: WikiTitle,
         connection: &Connection,
-    ) -> Result<Option<(String, i64)>, rusqlite::Error> {
+    ) -> Result<Vec<(String, i64)>, rusqlite::Error> {
         let query = "SELECT  link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 20".to_string();
         let mut stmt = connection.prepare_cached(&query)?;
         let rows = stmt.query([&self.label.to_lowercase()])?;
 
         let link_record_items = rows.map(|r| Ok((r.get(0)?, r.get::<_, i64>(1)?))).unwrap();
 
-        let records: Vec<(String, i64)> = link_record_items.collect::<Vec<(String, i64)>>();
+        Ok(link_record_items.collect::<Vec<(String, i64)>>())
+    }
+
+    fn find_title_for_label(
+        &self,
+        source_article: WikiTitle,
+        connection: &Connection,
+    ) -> Result<Option<(String, i64)>, rusqlite::Error> {
+        let records = self.candidate_distribution(connection)?;
 
         if records.is_empty() {
             return Ok(None);
