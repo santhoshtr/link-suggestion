@@ -120,21 +120,20 @@ impl LinkSuggestion {
     }
 
     pub fn confidence_score(&self) -> f32 {
-        let freq_min = 2;
-        let freq_max = self.frequency_max;
-
-        // Extract the frequency value or default to 0
-        if self.frequency.unwrap() <= freq_min {
-            return 0.0;
-        }
+        let freq_min: f32 = 1.0;
+        let freq_max = self.frequency_max as f32;
 
         if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
             // Edge cases: A title for the label could not be found.
             return 0.0;
         }
 
-        ((self.frequency.unwrap() as f32).ln() - (freq_min as f32).log10())
-            / ((freq_max as f32).ln() - (freq_min as f32).log10())
+        let fc = self.frequency.unwrap() as f32;
+        if fc <= freq_min {
+            return 0.0;
+        }
+
+        ((fc.ln() - freq_min.ln()) / (freq_max.ln() - freq_min.ln())).clamp(0.0, 1.0)
     }
 
     pub fn process(&mut self, source_article: WikiTitle, conn: Arc<Mutex<Connection>>) {
@@ -389,4 +388,57 @@ pub fn filter_suggestions(
             true
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tree_sitter::Range;
+
+    fn make_suggestion(freq: i64, freq_max: i64) -> LinkSuggestion {
+        let range = Range {
+            start_byte: 0,
+            end_byte: 4,
+            start_point: tree_sitter::Point { row: 0, column: 0 },
+            end_point: tree_sitter::Point { row: 0, column: 4 },
+        };
+        let segment = TextSegment {
+            text: "test".to_string(),
+            range,
+        };
+        let title = WikiTitle::new("Test", "en".to_string());
+        let mut s = LinkSuggestion::new(segment, title);
+        s.frequency = Some(freq);
+        s.frequency_max = freq_max;
+        s
+    }
+
+    #[test]
+    fn confidence_score_at_freq_min_is_zero() {
+        let s = make_suggestion(1, 10000);
+        assert_eq!(s.confidence_score(), 0.0);
+    }
+
+    #[test]
+    fn confidence_score_at_freq_max_is_one() {
+        let freq_max = 23789;
+        let s = make_suggestion(freq_max, freq_max);
+        assert!((s.confidence_score() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn confidence_score_interior_is_between_zero_and_one() {
+        let s = make_suggestion(42, 23789);
+        let score = s.confidence_score();
+        assert!(score > 0.0 && score < 1.0, "score was {score}");
+    }
+
+    #[test]
+    fn confidence_score_is_monotone() {
+        let freq_max = 23789;
+        let low = make_suggestion(10, freq_max).confidence_score();
+        let mid = make_suggestion(100, freq_max).confidence_score();
+        let high = make_suggestion(10000, freq_max).confidence_score();
+        assert!(low < mid && mid < high, "scores: {low} {mid} {high}");
+    }
 }
