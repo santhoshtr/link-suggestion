@@ -11,7 +11,8 @@ use std::io::Write;
 
 #[derive(Parser)]
 struct Args {
-    /// bz2 compressed XML dump file from a wikipedia
+    /// URL of a bz2-compressed XML dump, e.g.
+    /// https://dumps.wikimedia.org/mlwiki/latest/mlwiki-latest-pages-articles.xml.bz2
     #[arg(short, long)]
     input: String,
     #[arg(short, long)]
@@ -160,10 +161,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         args.language.as_str()
     };
-    // Read the file and pass content to extract_links.
-    let file_name = &args.input;
-    let file = std::fs::File::open(file_name).unwrap();
-    let bz2_file = std::io::BufReader::new(file);
+    // Stream the bz2 dump straight off the network into the decompress/parse
+    // pipeline below; the response body is read incrementally, never buffered to
+    // disk or fully into memory.
+    let response = reqwest::blocking::Client::new()
+        .get(&args.input)
+        .header(
+            "User-Agent",
+            "WikiLink-Suggester/1.0 (https://gitlab.wikimedia.org/toolforge-repos/linker)",
+        )
+        .send()?
+        .error_for_status()?;
+    let bz2_file = std::io::BufReader::new(response);
     let decoder = bzip2::bufread::MultiBzDecoder::new(bz2_file);
     let buffered_reader = std::io::BufReader::new(decoder);
     let mut xml_reader = NsReader::from_reader(buffered_reader);
