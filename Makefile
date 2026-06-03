@@ -3,16 +3,16 @@
 # Run with `make -j` to use all CPU cores.
 # =========================================================
 
-wikipedia.list:
-	curl -s https://noc.wikimedia.org/conf/dblists/closed.dblist > closed.dblist 
-	curl -s https://noc.wikimedia.org/conf/dblists/wikipedia.dblist | grep -E 'wiki$$' | grep -v '^#' | grep -v -f closed.dblist > $@
+data/wikipedia.list:
+	curl -s https://noc.wikimedia.org/conf/dblists/closed.dblist > data/closed.dblist
+	curl -s https://noc.wikimedia.org/conf/dblists/wikipedia.dblist | grep -E 'wiki$$' | grep -v '^#' | grep -v -f data/closed.dblist > $@
 	sed -i '/^arbcom/d' $@
 	sed -i '/^sysop/d' $@
 	sed -i '/^wg_en/d' $@
 	sed -i '/^cebwiki/d' $@
 	sed -i '/^warwiki/d' $@
 	sed -i '/^be_x_old/d' $@
-	rm closed.dblist
+	rm data/closed.dblist
 
 init:
 	cargo build --profile=release
