@@ -1,4 +1,4 @@
-use rusqlite::{Connection, fallible_iterator::FallibleIterator};
+use rusqlite::{Connection, OptionalExtension, fallible_iterator::FallibleIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -158,16 +158,18 @@ impl LinkSuggestion {
         let Some(title) = self.title.clone() else {
             return;
         };
-        // Now we want to see if the tille really exist. This is where we eliminate red links as
-        // well.
-        if !Self::is_valid_title(&title, conn) {
+        // Check the title really exists (eliminating red links) and resolve any
+        // redirect to its canonical target, so the suggestion links directly
+        // rather than to the redirect page.
+        let Some(resolved) = Self::resolve_valid_title(&title, conn) else {
             self.frequency = Some(0);
             return;
-        }
+        };
+        self.title = Some(resolved.clone());
         // F_c for the confidence score must be the title's total link frequency
         // (title-grain) so it shares the same scale as F_max. The pair count from
         // find_title_for_label above is only used for candidate ranking.
-        self.frequency = Some(Self::get_title_frequency(&title, conn).unwrap());
+        self.frequency = Some(Self::get_title_frequency(&resolved, conn).unwrap());
         self.frequency_max = self.get_freq_max(conn, &language).unwrap();
     }
 
@@ -180,24 +182,28 @@ impl LinkSuggestion {
         stmt.query_row([title.normalized()], |row| row.get(0))
     }
 
-    fn is_valid_title(title: &WikiTitle, connection: &Connection) -> bool {
+    /// Validates a candidate title and resolves it to a canonical link target.
+    /// Returns the title itself if it is a real article, the redirect's target if
+    /// it is a redirect (resolved one hop so the suggestion links directly rather
+    /// than to the redirect page), or `None` for a red link.
+    fn resolve_valid_title(title: &WikiTitle, connection: &Connection) -> Option<WikiTitle> {
         if !title.is_valid() {
-            return false;
+            return None;
         }
         let mut stmt = connection
             .prepare_cached("SELECT 1 FROM links WHERE article_title = ?1 LIMIT 1")
             .unwrap();
         if stmt.exists([title.normalized()]).unwrap_or(false) {
-            return true;
+            return Some(title.clone());
         }
         let mut stmt = connection
-            .prepare_cached("SELECT 1 FROM redirects WHERE article_title = ?1 LIMIT 1")
+            .prepare_cached("SELECT target_title FROM redirects WHERE article_title = ?1 LIMIT 1")
             .unwrap();
-        if stmt.exists([title.normalized()]).unwrap_or(false) {
-            return true;
-        }
-
-        false
+        let target: Option<String> = stmt
+            .query_row([title.normalized()], |row| row.get(0))
+            .optional()
+            .unwrap();
+        target.map(|t| WikiTitle::new(&t, title.language().to_string()))
     }
 
     fn find_title_for_label(
