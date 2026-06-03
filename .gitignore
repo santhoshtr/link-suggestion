@@ -1,7 +1,4 @@
 /target
-*.list
-/titles
-/bloom
-/anchor-dictionaries
+/data
 /tmp
 

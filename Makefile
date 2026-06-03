@@ -3,8 +3,6 @@
 # Run with `make -j` to use all CPU cores.
 # =========================================================
 
-# Query to find all page titles
-PAGEQUERY := "SELECT page_title FROM page WHERE page_namespace=0" 
 wikipedia.list:
 	curl -s https://noc.wikimedia.org/conf/dblists/closed.dblist > closed.dblist 
 	curl -s https://noc.wikimedia.org/conf/dblists/wikipedia.dblist | grep -E 'wiki$$' | grep -v '^#' | grep -v -f closed.dblist > $@
@@ -17,24 +15,24 @@ wikipedia.list:
 	rm closed.dblist
 
 init:
-	cargo build --profile=release 
-	mkdir -p titles
-	mkdir -p bloom
-	mkdir -p anchor-dictionaries
+	cargo build --profile=release
+	mkdir -p data/titles
+	mkdir -p data/bloom
+	mkdir -p data/anchor-dictionaries
 
-titles/%.titles.list:
-	echo $(PAGEQUERY) | analytics-mysql $* > $@
+data/titles/%.titles.list: data/anchor-dictionaries/%.sqlite
+	./target/release/sqlite-cli --database $< --no-header --query "SELECT DISTINCT link_title FROM links" > $@
 
-titles/%.labels.list: anchor-dictionaries/%.sqlite
-	./target/release/sqlite-cli --database $< --query "SELECT DISTINCT link_label FROM links" > $@
-	
-bloom/%.bloom: titles/%.titles.list
-	./target/release/linksuggestion-bloom build -i titles/$*.titles.list -o $@
+data/titles/%.labels.list: data/anchor-dictionaries/%.sqlite
+	./target/release/sqlite-cli --database $< --no-header --query "SELECT DISTINCT link_label FROM links" > $@
 
-bloom/%.labels.bloom: anchor-dictionaries/%.sqlite titles/%.labels.list
-	./target/release/linksuggestion-bloom build -i titles/$*.labels.list -o $@
+data/bloom/%.bloom: data/titles/%.titles.list
+	./target/release/linksuggestion-bloom build -i data/titles/$*.titles.list -o $@
 
-anchor-dictionaries/%.sqlite:
+data/bloom/%.labels.bloom: data/anchor-dictionaries/%.sqlite data/titles/%.labels.list
+	./target/release/linksuggestion-bloom build -i data/titles/$*.labels.list -o $@
+
+data/anchor-dictionaries/%.sqlite:
 	./target/release/anchor-dictionary \
 		--language $* \
 		--input /mnt/data/xmldatadumps/public/$*/latest/$*-latest-pages-articles.xml.bz2 \
@@ -42,13 +40,13 @@ anchor-dictionaries/%.sqlite:
 	  --output $@
 
 WIKIS := $(shell cat wikipedia.list)
-WIKI_TARGETS := $(addprefix titles/,$(addsuffix .titles.list,$(WIKIS)))
-WIKI_BLOOM_TARGETS := $(addprefix bloom/, $(addsuffix .bloom,$(WIKIS)))
-WIKI_BLOOM_LABELS_TARGETS := $(addprefix bloom/, $(addsuffix .labels.bloom,$(WIKIS)))
-WIKI_ANCHOR_DICTIONARIES := $(addprefix anchor-dictionaries/, $(addsuffix .sqlite,$(WIKIS)))
+WIKI_TARGETS := $(addprefix data/titles/,$(addsuffix .titles.list,$(WIKIS)))
+WIKI_BLOOM_TARGETS := $(addprefix data/bloom/, $(addsuffix .bloom,$(WIKIS)))
+WIKI_BLOOM_LABELS_TARGETS := $(addprefix data/bloom/, $(addsuffix .labels.bloom,$(WIKIS)))
+WIKI_ANCHOR_DICTIONARIES := $(addprefix data/anchor-dictionaries/, $(addsuffix .sqlite,$(WIKIS)))
 
-.PHONY: titles bloom anchor-dictionaries 
+.PHONY: titles bloom anchor-dictionaries
 titles: $(WIKI_TARGETS)
 bloom: $(WIKI_BLOOM_TARGETS)
 bloom-labels: $(WIKI_BLOOM_LABELS_TARGETS)
-anchor-dictionaries: $(WIKI_BLOOM_TARGETS)
+anchor-dictionaries: $(WIKI_ANCHOR_DICTIONARIES)

@@ -13,19 +13,19 @@ cleanup_function() {
 # Set the trap for SIGINT (Ctrl+C)
 trap cleanup_function SIGINT
 
-rm -rf bloom anchor-dictionaries
+rm -rf data/bloom data/anchor-dictionaries
 
 for lang in "${LANGUAGES[@]}"; do
 	# Create the local directories if they don't exist
-	mkdir -p "bloom"
-	mkdir -p "anchor-dictionaries"
+	mkdir -p "data/bloom"
+	mkdir -p "data/anchor-dictionaries"
 
 	# Download bloom files
-	wget "${REMOTE_BASE}/bloom/${lang}wiki.bloom" -P "bloom/"
-	wget "${REMOTE_BASE}/bloom/${lang}wiki.labels.bloom" -P "bloom/"
+	wget "${REMOTE_BASE}/bloom/${lang}wiki.bloom" -P "data/bloom/"
+	wget "${REMOTE_BASE}/bloom/${lang}wiki.labels.bloom" -P "data/bloom/"
 
 	# Download anchor-dictionaries files
-	wget "${REMOTE_BASE}/anchor-dictionaries/${lang}wiki.sqlite" -P "anchor-dictionaries/"
+	wget "${REMOTE_BASE}/anchor-dictionaries/${lang}wiki.sqlite" -P "data/anchor-dictionaries/"
 done
 
 toolforge build start https://gitlab.wikimedia.org/toolforge-repos/linker

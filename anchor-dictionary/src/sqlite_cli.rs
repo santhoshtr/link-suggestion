@@ -14,9 +14,13 @@ struct Cli {
     /// SQL query to execute
     #[arg(short, long)]
     query: String,
+
+    /// Suppress the column header row
+    #[arg(long)]
+    no_header: bool,
 }
 
-fn execute_query(db_path: &PathBuf, query: &str) -> Result<()> {
+fn execute_query(db_path: &PathBuf, query: &str, no_header: bool) -> Result<()> {
     let conn = Connection::open(db_path)?;
 
     let mut stmt = conn.prepare(query)?;
@@ -39,7 +43,7 @@ fn execute_query(db_path: &PathBuf, query: &str) -> Result<()> {
     })?;
 
     // Print column headers
-    if !column_names.is_empty() {
+    if !no_header && !column_names.is_empty() {
         println!("{}", column_names.join("\t"));
     }
 
@@ -55,7 +59,7 @@ fn execute_query(db_path: &PathBuf, query: &str) -> Result<()> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    execute_query(&cli.database, &cli.query)?;
+    execute_query(&cli.database, &cli.query, cli.no_header)?;
 
     Ok(())
 }

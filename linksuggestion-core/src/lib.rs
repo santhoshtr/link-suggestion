@@ -70,7 +70,7 @@ fn load_bloom_filters(language: &str) -> BloomPair {
         }
     }
 
-    let data_dir = std::env::var("TOOL_DATA_DIR").unwrap_or_else(|_| ".".to_string());
+    let data_dir = std::env::var("TOOL_DATA_DIR").unwrap_or_else(|_| "data".to_string());
 
     let title_file = PathBuf::from(format!("{data_dir}/bloom/{language}wiki.bloom"));
     let title_filter = BloomFilterManager::load_from_file(&title_file)
