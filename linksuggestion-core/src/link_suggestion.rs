@@ -17,15 +17,15 @@ pub struct LinkSuggestion {
     pub text_segment: TextSegment,
     pub title: WikiTitle,
     pub label: String,
-    pub frequency: Option<usize>,
-    pub frequency_max: usize,
+    pub frequency: Option<i64>,
+    pub frequency_max: i64,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkSuggestionRecord {
     pub language: String,
     pub title: WikiTitle,
     pub link_text: String,
-    pub frequency: usize,
+    pub frequency: i64,
     pub score: f32,
     // Add character indices
     pub wikitext_offset: usize,
@@ -90,12 +90,12 @@ impl LinkSuggestion {
         &self,
         connection: MutexGuard<'_, Connection>,
         language: &str,
-    ) -> Result<usize, rusqlite::Error> {
+    ) -> Result<i64, rusqlite::Error> {
         // Check cache first
         {
             let cache = FREQ_MAX_CACHE.lock().unwrap();
             if let Some(&cached_value) = cache.get(language) {
-                return Ok(cached_value);
+                return Ok(cached_value as i64);
             }
         }
 
@@ -105,7 +105,7 @@ impl LinkSuggestion {
         let mut rows = stmt.query([])?;
 
         let freq_max = if let Some(first_row) = rows.next()? {
-            first_row.get(0)?
+            first_row.get::<_, i64>(0)?
         } else {
             0
         };
@@ -113,7 +113,7 @@ impl LinkSuggestion {
         // Cache the result
         {
             let mut cache = FREQ_MAX_CACHE.lock().unwrap();
-            cache.insert(language.to_string(), freq_max);
+            cache.insert(language.to_string(), freq_max.try_into().unwrap());
         }
 
         Ok(freq_max)
@@ -183,14 +183,14 @@ impl LinkSuggestion {
         &self,
         source_article: WikiTitle,
         connection: MutexGuard<'_, Connection>,
-    ) -> Result<Option<(String, usize)>, rusqlite::Error> {
+    ) -> Result<Option<(String, i64)>, rusqlite::Error> {
         let query = "SELECT  link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 4".to_string();
         let mut stmt = connection.prepare(&query)?;
         let rows = stmt.query([&self.label.to_lowercase()])?;
 
-        let link_record_items = rows.map(|r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        let link_record_items = rows.map(|r| Ok((r.get(0)?, r.get::<_, i64>(1)?))).unwrap();
 
-        let records: Vec<(String, usize)> = link_record_items.collect::<Vec<(String, usize)>>();
+        let records: Vec<(String, i64)> = link_record_items.collect::<Vec<(String, i64)>>();
 
         if records.is_empty() {
             return Ok(None);
