@@ -15,7 +15,9 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct LinkSuggestion {
     pub text_segment: TextSegment,
-    pub title: WikiTitle,
+    /// The resolved link target. `None` until disambiguation finds a title for
+    /// the label (label candidates start unresolved).
+    pub title: Option<WikiTitle>,
     pub label: String,
     pub frequency: Option<i64>,
     pub frequency_max: i64,
@@ -70,16 +72,18 @@ impl LinkSuggestion {
         let label = title.raw().to_string();
         LinkSuggestion {
             text_segment,
-            title,
+            title: Some(title),
             label,
             frequency: Some(0),
             frequency_max: 0,
         }
     }
-    pub fn new_with_label(text_segment: TextSegment, title: WikiTitle, label: String) -> Self {
+    /// Creates an unresolved label candidate: it passed the label bloom but its
+    /// title is not yet known. `process()` resolves it via `find_title_for_label`.
+    pub fn new_with_label(text_segment: TextSegment, label: String) -> Self {
         LinkSuggestion {
             text_segment,
-            title,
+            title: None,
             label,
             frequency: Some(0),
             frequency_max: 0,
@@ -123,8 +127,8 @@ impl LinkSuggestion {
         let freq_min: f32 = 1.0;
         let freq_max = self.frequency_max as f32;
 
-        if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
-            // Edge cases: A title for the label could not be found.
+        if self.title.is_none() {
+            // A title for the label could not be resolved.
             return 0.0;
         }
 
@@ -137,47 +141,59 @@ impl LinkSuggestion {
     }
 
     pub fn process(&mut self, source_article: WikiTitle, conn: &Connection) {
-        let res = self.find_title_for_label(source_article, conn).unwrap();
-        if let Some(link_record) = res {
-            self.title = WikiTitle::new(&link_record.0, self.title.language().to_string());
-            self.frequency = Some(link_record.1);
+        // Candidates live in the same wiki as the source article, so take the
+        // language from it (label candidates have no title to read it from yet).
+        let language = source_article.language().to_string();
+        if let Some((resolved_title, freq)) =
+            self.find_title_for_label(source_article, conn).unwrap()
+        {
+            self.title = Some(WikiTitle::new(&resolved_title, language.clone()));
+            self.frequency = Some(freq);
         }
+        // Unresolved label candidate, or a title whose label had no links:
+        // frequency is non-zero only when the block above set a title.
         if self.frequency == Some(0) {
             return;
         }
+        let Some(title) = self.title.clone() else {
+            return;
+        };
         // Now we want to see if the tille really exist. This is where we eliminate red links as
         // well.
-        if !self.is_valid_title(conn) {
+        if !Self::is_valid_title(&title, conn) {
             self.frequency = Some(0);
             return;
         }
         // F_c for the confidence score must be the title's total link frequency
         // (title-grain) so it shares the same scale as F_max. The pair count from
         // find_title_for_label above is only used for candidate ranking.
-        self.frequency = Some(self.get_title_frequency(conn).unwrap());
-        self.frequency_max = self.get_freq_max(conn, self.title.language()).unwrap();
+        self.frequency = Some(Self::get_title_frequency(&title, conn).unwrap());
+        self.frequency_max = self.get_freq_max(conn, &language).unwrap();
     }
 
-    fn get_title_frequency(&self, connection: &Connection) -> Result<i64, rusqlite::Error> {
+    fn get_title_frequency(
+        title: &WikiTitle,
+        connection: &Connection,
+    ) -> Result<i64, rusqlite::Error> {
         let mut stmt = connection
             .prepare_cached("SELECT COUNT(*) AS freq FROM links WHERE link_title = ?1")?;
-        stmt.query_row([self.title.normalized()], |row| row.get(0))
+        stmt.query_row([title.normalized()], |row| row.get(0))
     }
 
-    fn is_valid_title(&self, connection: &Connection) -> bool {
-        if !self.title.is_valid() {
+    fn is_valid_title(title: &WikiTitle, connection: &Connection) -> bool {
+        if !title.is_valid() {
             return false;
         }
         let mut stmt = connection
             .prepare_cached("SELECT 1 FROM links WHERE article_title = ?1 LIMIT 1")
             .unwrap();
-        if stmt.exists([self.title.normalized()]).unwrap_or(false) {
+        if stmt.exists([title.normalized()]).unwrap_or(false) {
             return true;
         }
         let mut stmt = connection
             .prepare_cached("SELECT 1 FROM redirects WHERE article_title = ?1 LIMIT 1")
             .unwrap();
-        if stmt.exists([self.title.normalized()]).unwrap_or(false) {
+        if stmt.exists([title.normalized()]).unwrap_or(false) {
             return true;
         }
 
@@ -245,6 +261,7 @@ impl LinkSuggestion {
     ///
     /// The byte positions are calculated relative to the text segment's start_byte.
     pub fn calculate_link_edit_positions(&self) -> Option<(usize, usize, String)> {
+        let title = self.title.as_ref()?;
         let text = &self.text_segment.text;
         let label = &self.label;
 
@@ -257,10 +274,10 @@ impl LinkSuggestion {
             let absolute_end = self.text_segment.range.start_byte + label_end;
 
             // Create the wiki link replacement text
-            let replacement: String = if self.title.normalized() == label {
+            let replacement: String = if title.normalized() == label {
                 format!("[[{label}]]")
             } else {
-                format!("[[{}|{}]]", self.title.normalized(), label)
+                format!("[[{}|{}]]", title.normalized(), label)
             };
 
             Some((absolute_start, absolute_end, replacement))
@@ -302,11 +319,13 @@ impl LinkSuggestion {
 
 impl PartialEq for LinkSuggestion {
     fn eq(&self, other: &Self) -> bool {
-        // Two LinkSuggestions are equal if they have the same title or label
-        if self.title.normalized() == "WE_WILL_FIGURE_OUT_LATER" {
-            return self.label == other.label;
+        // Resolved suggestions are equal when they share a title; an unresolved
+        // candidate (no title yet) is compared by its label instead.
+        match (&self.title, &other.title) {
+            (None, _) => self.label == other.label,
+            (Some(_), None) => false,
+            (Some(a), Some(b)) => a.normalized() == b.normalized(),
         }
-        self.title.normalized() == other.title.normalized()
     }
 }
 
@@ -350,7 +369,10 @@ impl fmt::Display for LinkSuggestion {
         writeln!(
             f,
             "Suggestion: [[{}|{}]]",
-            self.title.normalized(),
+            self.title
+                .as_ref()
+                .map(|t| t.normalized())
+                .unwrap_or("<unresolved>"),
             self.label
         )?;
 
@@ -383,11 +405,16 @@ pub fn filter_suggestions(
     candidates
         .into_iter()
         .filter(|candidate| {
-            let normalized = candidate.title.normalized();
-            // Deduplicate based on normalized title
+            // Deduplicate based on label
             if !seen_titles.insert(candidate.label.to_string()) {
                 return false;
             }
+            // Unresolved label candidates have no title yet; only the label
+            // dedup above applies to them.
+            let Some(title) = &candidate.title else {
+                return true;
+            };
+            let normalized = title.normalized();
             // Remove candidates that are already present in existing WikiLinks
             if existing_links
                 .iter()
@@ -395,10 +422,10 @@ pub fn filter_suggestions(
             {
                 return false;
             }
-            if candidate.title.normalized() == current_article_title {
+            if normalized == current_article_title {
                 return false;
             }
-            if candidate.title.raw() == current_article_title {
+            if title.raw() == current_article_title {
                 return false;
             }
 

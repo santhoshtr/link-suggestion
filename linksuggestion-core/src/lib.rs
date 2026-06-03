@@ -119,7 +119,6 @@ fn process_label_candidates(
     segment: &TextSegment,
     candidates: Vec<String>,
     label_filter: &BloomFilterManager,
-    language: &str,
 ) -> Vec<LinkSuggestion> {
     let mut suggestions = Vec::new();
 
@@ -132,12 +131,7 @@ fn process_label_candidates(
         return suggestions;
     }
     for candidate in filtered_candidates {
-        let wiki_title = WikiTitle::new("WE_WILL_FIGURE_OUT_LATER", language.to_owned());
-        suggestions.push(LinkSuggestion::new_with_label(
-            segment.clone(),
-            wiki_title,
-            candidate,
-        ));
+        suggestions.push(LinkSuggestion::new_with_label(segment.clone(), candidate));
     }
 
     suggestions
@@ -162,8 +156,7 @@ fn process_text_segments(
         link_suggestions.extend(title_suggestions);
 
         // Process label candidates
-        let label_suggestions =
-            process_label_candidates(&segment, link_candidates, label_filter, language);
+        let label_suggestions = process_label_candidates(&segment, link_candidates, label_filter);
         link_suggestions.extend(label_suggestions);
     }
     link_suggestions.sort();
@@ -221,13 +214,17 @@ pub async fn process_links_command(
     let suggestions: Vec<LinkSuggestionRecord> = accepted
         .iter()
         .zip(char_offsets)
-        .map(|(suggestion, char_start)| LinkSuggestionRecord {
-            language: language.to_string(),
-            title: suggestion.title.to_owned(),
-            link_text: suggestion.label.to_owned(),
-            frequency: suggestion.frequency.unwrap_or_default(),
-            score: suggestion.confidence_score(),
-            wikitext_offset: char_start,
+        .filter_map(|(suggestion, char_start)| {
+            // Drop any unresolved candidate that slipped through (e.g. at a zero
+            // threshold) — only suggestions with a resolved title are emitted.
+            suggestion.title.as_ref().map(|title| LinkSuggestionRecord {
+                language: language.to_string(),
+                title: title.to_owned(),
+                link_text: suggestion.label.to_owned(),
+                frequency: suggestion.frequency.unwrap_or_default(),
+                score: suggestion.confidence_score(),
+                wikitext_offset: char_start,
+            })
         })
         .collect();
     Ok(LinkSuggestionsResult {
