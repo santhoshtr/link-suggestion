@@ -101,7 +101,7 @@ impl LinkSuggestion {
 
         // Query database if not cached
         let query = "SELECT COUNT(link_title) as freq FROM Links GROUP BY link_title ORDER BY freq DESC LIMIT 1";
-        let mut stmt = connection.prepare(query)?;
+        let mut stmt = connection.prepare_cached(query)?;
         let mut rows = stmt.query([])?;
 
         let freq_max = if let Some(first_row) = rows.next()? {
@@ -163,13 +163,13 @@ impl LinkSuggestion {
             return false;
         }
         let mut stmt = connection
-            .prepare("SELECT 1 FROM links WHERE article_title = ?1 LIMIT 1")
+            .prepare_cached("SELECT 1 FROM links WHERE article_title = ?1 LIMIT 1")
             .unwrap();
         if stmt.exists([self.title.normalized()]).unwrap_or(false) {
             return true;
         }
         let mut stmt = connection
-            .prepare("SELECT 1 FROM redirects WHERE article_title = ?1 LIMIT 1")
+            .prepare_cached("SELECT 1 FROM redirects WHERE article_title = ?1 LIMIT 1")
             .unwrap();
         if stmt.exists([self.title.normalized()]).unwrap_or(false) {
             return true;
@@ -184,7 +184,7 @@ impl LinkSuggestion {
         connection: MutexGuard<'_, Connection>,
     ) -> Result<Option<(String, i64)>, rusqlite::Error> {
         let query = "SELECT  link_title, count(link_title) as freq FROM links WHERE link_label = ?1 GROUP by link_title ORDER BY freq DESC LIMIT 4".to_string();
-        let mut stmt = connection.prepare(&query)?;
+        let mut stmt = connection.prepare_cached(&query)?;
         let rows = stmt.query([&self.label.to_lowercase()])?;
 
         let link_record_items = rows.map(|r| Ok((r.get(0)?, r.get::<_, i64>(1)?))).unwrap();
@@ -208,7 +208,7 @@ impl LinkSuggestion {
             // The suggestion will make them mutually linked.
             let reverse_relation_query =
                 "SELECT 1 FROM links WHERE article_title = ?1 AND link_title = ?2 LIMIT 1";
-            let mut reverse_stmt = connection.prepare(reverse_relation_query).unwrap();
+            let mut reverse_stmt = connection.prepare_cached(reverse_relation_query).unwrap();
             if reverse_stmt.exists([&record.0, source_article.normalized()])? {
                 // Target article links back to the source_article. Accept the candidate.
                 return Ok(Some(record.clone()));
