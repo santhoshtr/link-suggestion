@@ -3,9 +3,10 @@ use link_suggestion::{LinkSuggestion, LinkSuggestionRecord, filter_suggestions};
 use linksuggestion_bloom::BloomFilterManager;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex, RwLock};
 use wiki_title::{WikiTitle, fetch_wikipedia_wikitext};
 use wikitext::{TextSegment, WikiText};
 
@@ -24,23 +25,35 @@ pub struct LinkSuggestionsResult {
     pub suggestions: Vec<LinkSuggestionRecord>,
 }
 
-fn load_bloom_filters(language: &str) -> (BloomFilterManager, BloomFilterManager) {
+type BloomPair = Arc<(BloomFilterManager, BloomFilterManager)>;
+
+static BLOOM_CACHE: LazyLock<RwLock<HashMap<String, BloomPair>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+fn load_bloom_filters(language: &str) -> BloomPair {
+    {
+        let cache = BLOOM_CACHE.read().unwrap();
+        if let Some(pair) = cache.get(language) {
+            return Arc::clone(pair);
+        }
+    }
+
     let data_dir = std::env::var("TOOL_DATA_DIR").unwrap_or_else(|_| ".".to_string());
 
-    let link_title_bloom_filter_file =
-        PathBuf::from(format!("{data_dir}/bloom/{language}wiki.bloom"));
-    let link_title_filter_manager =
-        BloomFilterManager::load_from_file(&link_title_bloom_filter_file)
-            .unwrap_or_else(|_| panic!("Error reading file {data_dir}/bloom/{language}wiki.bloom"));
+    let title_file = PathBuf::from(format!("{data_dir}/bloom/{language}wiki.bloom"));
+    let title_filter = BloomFilterManager::load_from_file(&title_file)
+        .unwrap_or_else(|_| panic!("Error reading file {}", title_file.display()));
 
-    let link_label_bloom_filter_file =
-        PathBuf::from(format!("{data_dir}/bloom/{language}wiki.labels.bloom"));
-    let link_label_filter_manager =
-        BloomFilterManager::load_from_file(&link_label_bloom_filter_file).unwrap_or_else(|_| {
-            panic!(" Error reading file {data_dir}/bloom/{language}wiki.labels.bloom")
-        });
+    let label_file = PathBuf::from(format!("{data_dir}/bloom/{language}wiki.labels.bloom"));
+    let label_filter = BloomFilterManager::load_from_file(&label_file)
+        .unwrap_or_else(|_| panic!("Error reading file {}", label_file.display()));
 
-    (link_title_filter_manager, link_label_filter_manager)
+    let pair = Arc::new((title_filter, label_filter));
+    BLOOM_CACHE
+        .write()
+        .unwrap()
+        .insert(language.to_string(), Arc::clone(&pair));
+    pair
 }
 
 fn process_title_candidates(
@@ -140,8 +153,9 @@ pub async fn process_links_command(
     let existing_links = parser.extract_links(wikitext.as_str()).unwrap();
     let text_segments = parser.extract_text(wikitext.as_str()).unwrap();
 
-    // Load bloom filters
-    let (title_filter, label_filter) = load_bloom_filters(language);
+    // Load bloom filters (cached after first load per language)
+    let bloom_pair = load_bloom_filters(language);
+    let (title_filter, label_filter) = (&bloom_pair.0, &bloom_pair.1);
 
     // Process all text segments
     let link_suggestions =
