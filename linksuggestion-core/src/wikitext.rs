@@ -164,51 +164,28 @@ impl TextSegment {
                     .to_lowercase()
             })
             .filter(|word| {
-                !word.is_empty() 
+                !word.is_empty()
                     && word.len() > 1  // Remove single letter words
                     && word.parse::<f64>().is_err()  // Remove words that are numbers (including decimals)
             })
             .collect()
     }
 
-    fn bigrams(&self) -> Vec<String> {
-        let words = self.one_grams();
-        let mut bigrams = Vec::new();
-
-        for i in 0..words.len().saturating_sub(1) {
-            bigrams.push(format!("{} {}", words[i], words[i + 1]));
+    fn ngrams(words: &[String], n: usize) -> Vec<String> {
+        if words.len() < n {
+            return Vec::new();
         }
-
-        bigrams
+        (0..=words.len() - n)
+            .map(|i| words[i..i + n].join(" "))
+            .collect()
     }
-
-    fn trigrams(&self) -> Vec<String> {
-        let words = self.one_grams();
-        let mut trigrams = Vec::new();
-
-        for i in 0..words.len().saturating_sub(2) {
-            trigrams.push(format!("{} {} {}", words[i], words[i + 1], words[i + 2]));
-        }
-
-        trigrams
-    }
-    fn four_grams(&self) -> Vec<String> {
-            let words = self.one_grams();
-            let mut fourgrams = Vec::new();
-
-            for i in 0..words.len().saturating_sub(3) {
-                fourgrams.push(format!("{} {} {} {}", words[i], words[i + 1], words[i + 2],words[i + 3]));
-            }
-
-            fourgrams
-        }
 
     pub fn link_candidates(&self) -> Vec<String> {
-        let mut candidates = Vec::new();
-        candidates.extend(self.one_grams());
-        candidates.extend(self.bigrams());
-        candidates.extend(self.trigrams());
-        candidates.extend(self.four_grams());
+        let words = self.one_grams();
+        let mut candidates = words.clone();
+        for n in 2..=5 {
+            candidates.extend(Self::ngrams(&words, n));
+        }
         candidates
     }
 }
